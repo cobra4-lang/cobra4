@@ -1,0 +1,92 @@
+site_name: cobra4
+site_description: A high-level, cloud-native language transpiled to Python.
+site_url: https://cobra4-lang.github.io/cobra4/
+repo_url: https://github.com/cobra4-lang/cobra4
+repo_name: cobra4-lang/cobra4
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  logo: assets/logo-128.png
+  favicon: assets/cobra4.ico
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/install.md
+      - First program: getting-started/first-program.md
+  - Language:
+      - Lexicon & syntax: language/lexicon.md
+      - Statements: language/statements.md
+      - Functions & classes: language/functions.md
+      - Pattern matching: language/match.md
+      - Smart dispatch: language/smart-dispatch.md
+  - Cloud primitives:
+      - Read / save IO: cloud/io.md
+      - Concurrency: cloud/concurrency.md
+      - Daemon mode: cloud/serve.md
+      - Fleet & secrets: cloud/fleet.md
+      - Deploy adapters: cloud/deploy.md
+  - Plugins:
+      - Authoring a language plugin: plugins/authoring.md
+      - SQL / regex / yaml: plugins/builtin.md
+  - Tooling:
+      - CLI reference: tooling/cli.md
+      - LSP / IDE setup: tooling/lsp.md
+      - Test framework: tooling/test.md
+  - Reference:
+      - Stdlib API: reference/stdlib.md
+      - Environment variables: reference/env.md
+      - AI assistants guide: reference/ai-helper.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+
+plugins:
+  - search

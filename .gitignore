@@ -24,3 +24,6 @@ out_*.json
 out_*.csv
 _etl_*.csv
 _etl_*.json
+
+# mkdocs build output
+site/

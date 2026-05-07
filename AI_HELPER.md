@@ -49,9 +49,12 @@ serve deploy lang
 ### 1.2 Commenti
 
 ```cobra4
-# stile Python
-// stile C — alias equivalente
+# stile Python — l'unico supportato
 ```
+
+**Solo `#`** apre un commento. `//` è **sempre** floor division — versioni
+preliminari accettavano `//` come commento C-style ma c'era un conflitto
+ambiguo con l'operatore di divisione intera.
 
 Niente commenti multi-line: usa più righe singole.
 
@@ -170,8 +173,19 @@ xs[0] = 99                    # index assign
 counter += 1                  # aug-assign (tutti gli aug-assign Python)
 ```
 
-**Non c'è** annotation-only: `x: int` da solo non è statement valido.
-Scrivi `x: int = 0`.
+**Niente type annotation a livello di assegnamento**: né `x: int` né
+`x: int = 0` sono syntax valida — il `:` come separatore di tipo
+esiste *solo* su parametri di funzione e return type. Per esprimere
+un tipo, usalo nella signature:
+
+```cobra4
+fn make_count() -> int = 0
+counter = make_count()         # type-checker: counter: int
+```
+
+Oppure assegna direttamente con un literal del tipo voluto: l'inferenza
+copre `int`, `float`, `str`, `bool`, `list[T]`, `dict[K,V]`, `tuple[...]`,
+`set[T]`.
 
 ### 3.2 If / elif / else
 
@@ -398,14 +412,21 @@ class Admin(User) {
 }
 ```
 
-**`data class`** (sintassi sintetica, simile a Python `@dataclass`):
+**Niente `data class` "sintetico"**: la keyword `data` è riservata ma
+non c'è una shorthand simile a `data class Point(x, y)`. Per dataclass
+usa Python via `use`:
 
 ```cobra4
-data class Point(x, y)     # → class Point: __init__ generato
+use dataclasses
+
+@dataclasses.dataclass
+class Point {
+    x: int = 0
+    y: int = 0
+}
 ```
 
-**Limiti M5**: il `data class` produce solo init; per `__eq__`/`__hash__`
-usa `@dataclass` Python tramite `use dataclasses`.
+In alternativa, scrivi un `__init__` esplicito.
 
 ---
 
@@ -589,6 +610,32 @@ on event from queue("orders") {
 Esegui con `c4 serve file.c4` per il daemon vero. Senza, usa
 `from cobra4.runtime import core; core.run_scheduled_once()` o
 `run_scheduled_for(seconds)` per testing.
+
+### 7.5b Queue backend per `on event from queue(...)`
+
+`queue("name")` ritorna un `EventSource` la cui implementazione concreta
+dipende da `COBRA4_QUEUE_BACKEND`:
+
+| Backend | `COBRA4_QUEUE_BACKEND` | Setup |
+|---|---|---|
+| `InMemoryQueue` (default) | `memory` o non settato | nessuno |
+| `FileQueue` (durable, restart-safe) | `file` | `COBRA4_FILE_QUEUE_DIR=...` (default `~/.cobra4/queues/`) |
+| `SQSQueue` | `sqs` | `cobra4[aws]`, AWS creds, e il `name` deve essere un nome o ARN di queue SQS |
+| `RedisQueue` | `redis` | `pip install redis` + `COBRA4_REDIS_URL=redis://host:6379/0` |
+
+```cobra4
+on event from queue("orders") {
+    log("order", id=event.id)
+    process(event)
+}
+```
+
+Per produrre eventi a mano (test / boot):
+
+```cobra4
+use cobra4.runtime.schedule as sched
+sched.queue("orders").put({"id": "abc-123", "total": 42.0})
+```
 
 ### 7.6 Observability
 
@@ -1044,19 +1091,12 @@ fn process_order(o) {
 ```cobra4
 lang use sql
 
-use sqlalchemy as sa
+use cobra4.plugins.builtin.sql as _sql
 
-# Configura connection (pattern: override sql_run a livello modulo)
-_engine = sa.create_engine("postgresql://user:{secret('pg/password')}@db.prod:5432/app")
+# Configura il plugin (oppure setta COBRA4_SQL_URL nell'ambiente).
+_sql.configure("postgresql://user:{secret('pg/password')}@db.prod:5432/app")
 
-fn sql_run(query) {
-    "Override del default sql_run del plugin: esegue su _engine."
-    with _engine.connect() as conn {
-        return list(conn.execute(sa.text(query)).mappings())
-    }
-}
-
-# Query
+# `sql { ... }` viene riscritto dal plugin a `sql_run("...")`.
 adults = sql {
     SELECT id, name, age FROM users WHERE age >= 18 ORDER BY name LIMIT 100
 }
@@ -1066,6 +1106,12 @@ for u in adults where u["age"] > 65 {
     log("senior", id=u["id"])
 }
 ```
+
+**Nota**: `with` come statement context-manager **non è supportato** in
+cobra4 (non c'è `with x as y { ... }` nella grammatica). Per usare
+context manager Python (`open(...)`, `engine.connect()`, …) chiama il
+codice Python tramite `use` e gestisci enter/exit con `try`/`finally`,
+oppure scrivi una funzione helper Python e importala.
 
 ---
 
@@ -1082,6 +1128,11 @@ for u in adults where u["age"] > 65 {
 | `COBRA4_SECRETS_BACKEND` | `env`, `file`, `vault`, `aws-sm`, `gcp-sm` |
 | `COBRA4_SECRETS_DIR` | Root del backend `file` |
 | `COBRA4_LAMBDA_ROLE` | Default IAM role per `aws.lambda` deploy |
+| `COBRA4_QUEUE_BACKEND` | `memory` (default), `file`, `sqs`, `redis` — backend di `queue("name")` |
+| `COBRA4_FILE_QUEUE_DIR` | Root directory per il `FileQueue` durabile |
+| `COBRA4_REDIS_URL` | URL connessione per il `RedisQueue` (`redis://...`) |
+| `COBRA4_SQL_URL` | Default URL SQLAlchemy per il plugin `sql` |
+| `COBRA4_SECRET_<UPPER_PATH>` | Mapping con backend `env`: `secret("foo/bar")` legge `COBRA4_SECRET_FOO_BAR` |
 
 Setup pacchetti opzionali:
 
@@ -1150,7 +1201,7 @@ batte ogni documento. Mappa:
 Esegui il test suite per validare ogni cambiamento:
 
 ```bash
-python -m pytest                           # 155+ test
+python -m pytest                           # 174 passing (+ 2 skipped)
 python -m pytest tests/test_review_fixes.py  # regression sui fix critici
 ```
 
