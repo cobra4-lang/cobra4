@@ -18,3 +18,9 @@ editor/vscode/cobra4/package-lock.json
 # Local Claude/AI agent notes — never commit
 CLAUDE.local.md
 .claude/
+
+# c4 run artifacts at repo root
+out_*.json
+out_*.csv
+_etl_*.csv
+_etl_*.json
