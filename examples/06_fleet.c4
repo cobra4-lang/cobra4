@@ -1,0 +1,24 @@
+# Fleet operations: load inventory and run a command on each host in parallel.
+# In M3 the inventory is loaded from cobra4.toml; with no inventory present,
+# we fall back to a synthetic local-only host to keep the example self-contained.
+
+hosts = inventory("all")
+
+# Fall back to a single localhost entry if no inventory file is present.
+if len(hosts) == 0 {
+    hosts = [Host(name="local", addr="localhost")]
+}
+
+results = each h in hosts in parallel(workers=4) { run("echo hello from {h.name}", host=h) }
+
+ok = 0
+for r in results {
+    if r.ok {
+        ok = ok + 1
+        log("ok", host=r.host.name, out=r.stdout.strip())
+    } else {
+        log.warn("fail", host=r.host.name, code=r.returncode)
+    }
+}
+
+log("fleet done", ok=ok, total=len(results))

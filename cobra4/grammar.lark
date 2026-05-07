@@ -1,0 +1,284 @@
+// cobra4 grammar - M1 subset
+// Brace-based, LALR(1).
+// Block `{ ... }` and dict literal `{...}` are disambiguated by
+// grammatical context: blocks appear only after control-flow signatures
+// (`if`/`while`/`for`/`each`/`every`/`on event from`/`fn`/`class`/`match`/
+// `case`/`try`/`catch`/`finally`/`deploy`), while `{...}` in expression
+// position is always a dict (or set) literal.
+
+start: (_NL | stmt)*
+
+// ---------- Statements ----------
+
+?stmt: simple_stmt
+     | compound_stmt
+     | fn_decl
+     | class_decl
+     | use_stmt
+
+?simple_stmt: assign_or_expr
+            | return_stmt
+            | raise_stmt
+            | break_stmt
+            | continue_stmt
+            | pass_stmt
+
+assign_or_expr: expr assign_tail?
+
+?assign_tail: "=" expr                  -> assign_tail_eq
+            | AUG_OP expr               -> assign_tail_aug
+
+AUG_OP: "+=" | "-=" | "*=" | "/=" | "//=" | "%=" | "**=" | "&=" | "|=" | "^=" | ">>=" | "<<="
+
+return_stmt: "return" expr?
+raise_stmt: "raise" expr?
+break_stmt: "break"
+continue_stmt: "continue"
+pass_stmt: "pass"
+
+// ---------- Compound ----------
+
+?compound_stmt: if_stmt
+              | while_stmt
+              | for_stmt
+              | every_stmt
+              | on_event_stmt
+              | match_stmt
+              | try_stmt
+              | serve_stmt
+              | deploy_stmt
+
+if_stmt: "if" expr block ("elif" expr block)* ("else" block)?
+while_stmt: "while" expr block
+for_stmt: "for" NAME "in" expr_no_in each_where? block
+
+// `each x in EXPR_NO_IN ("in" "parallel" args)? block` — the iterable
+// expression cannot use the `in` membership operator at top level
+// (would conflict with the `in parallel` suffix). Use parens to nest:
+// `each x in (a in b) { ... }` works.
+each_parallel: "in" "parallel" parallel_args?
+parallel_args: "(" args? ")"
+
+// Optional comprehension-style filter for `each` / `for`:
+// `each x in xs where x > 0 { ... }`
+each_where: "where" expr_no_in
+
+every_stmt: "every" duration_lit block
+on_event_stmt: "on" "event" "from" expr block
+
+match_stmt: "match" expr "{" (_NL | case_clause)* "}"
+case_clause: "case" pattern_or case_guard? block
+case_guard: "if" expr_no_in
+pattern_or: pattern ("|" pattern)*
+
+try_stmt: "try" block catch_clause+ finally_clause?
+catch_clause: "catch" expr ("as" NAME)? block
+finally_clause: "finally" block
+
+serve_stmt: "serve" expr "on" port_lit
+deploy_stmt: "deploy" expr "to" expr block?
+
+duration_lit: NUMBER duration_unit
+duration_unit: "second"  -> dur_sec
+             | "seconds" -> dur_sec
+             | "minute"  -> dur_min
+             | "minutes" -> dur_min
+             | "hour"    -> dur_hour
+             | "hours"   -> dur_hour
+             | "day"     -> dur_day
+             | "days"    -> dur_day
+
+port_lit: ":" NUMBER
+
+// ---------- Use / fn / class ----------
+
+use_stmt: "use" use_target ("as" NAME)?
+use_target: NAME ("." NAME)* -> use_dotted
+          | STRING            -> use_string
+
+fn_decl: decorator* "fn" NAME "(" params? ")" return_type? fn_body
+fn_body: block                           -> fn_block_body
+       | "=" expr                        -> fn_expr_body
+
+decorator: "@" dotted_name ("(" args? ")")? _NL*
+dotted_name: NAME ("." NAME)*
+
+params: param ("," param)* ","?
+param: NAME (":" type)? ("=" expr)?    -> param_normal
+     | "*" NAME                         -> param_star
+     | "**" NAME                        -> param_dstar
+return_type: "->" type
+type: NAME ("[" type ("," type)* "]")?
+    | NAME "?"                            -> optional_type
+
+class_decl: "class" NAME class_super? "{" (_NL | class_body_item)* "}"
+class_super: "(" type ("," type)* ")"
+class_body_item: fn_decl | assign_or_expr | pass_stmt
+
+// ---------- Patterns ----------
+
+pattern: NUMBER                                            -> pat_num
+       | STRING                                            -> pat_str
+       | "True"                                            -> pat_true
+       | "False"                                           -> pat_false
+       | "None"                                            -> pat_none
+       | "_"                                               -> pat_wildcard
+       | NAME                                              -> pat_name
+       | NAME "(" (pat_item ("," pat_item)*)? ")"          -> pat_call
+       | "[" (pat_item ("," pat_item)*)? "]"               -> pat_list
+       | "{" (pat_dict_item ("," pat_dict_item)*)? "}"     -> pat_dict
+       | "(" pattern ("," pattern)+ ","? ")"               -> pat_tuple
+
+// `*rest` only valid in list patterns; `**rest` only valid in dict patterns.
+pat_item: pattern               -> pat_item_plain
+        | "*" NAME              -> pat_item_rest
+
+pat_dict_item: STRING ":" pattern   -> pat_dict_kv
+             | NUMBER ":" pattern   -> pat_dict_kv_num
+             | "**" NAME            -> pat_dict_rest
+
+// ---------- Block ----------
+
+block: "{" (_NL | stmt)* "}"
+
+// ---------- Expressions ----------
+
+?expr: ternary
+
+?ternary: or_expr ("if" or_expr "else" ternary)?
+
+?or_expr: and_expr ("or" and_expr)*
+?and_expr: not_expr ("and" not_expr)*
+?not_expr: "not" not_expr             -> not_op
+         | comparison
+
+?comparison: nullish (comp_op nullish)*
+comp_op: "==" -> eq
+       | "!=" -> ne
+       | "<"  -> lt
+       | ">"  -> gt
+       | "<=" -> le
+       | ">=" -> ge
+       | "is" "not"  -> is_not_op
+       | "is"        -> is_op
+       | "not" "in"  -> not_in_op
+       | "in"        -> in_op
+
+// Same hierarchy without the `in` / `not in` membership operators —
+// used in positions where `in` is a syntactic delimiter (`for x in EXPR`,
+// `each x in EXPR`). Levels below `comparison` are unchanged.
+?expr_no_in: ternary_no_in
+?ternary_no_in: or_expr_no_in ("if" or_expr_no_in "else" ternary_no_in)?  -> ternary
+?or_expr_no_in: and_expr_no_in ("or" and_expr_no_in)*                      -> or_expr
+?and_expr_no_in: not_expr_no_in ("and" not_expr_no_in)*                    -> and_expr
+?not_expr_no_in: "not" not_expr_no_in    -> not_op
+               | comparison_no_in
+?comparison_no_in: nullish (comp_op_no_in nullish)*                        -> comparison
+comp_op_no_in: "==" -> eq
+             | "!=" -> ne
+             | "<"  -> lt
+             | ">"  -> gt
+             | "<=" -> le
+             | ">=" -> ge
+             | "is" "not"  -> is_not_op
+             | "is"        -> is_op
+
+?nullish: bit_or ("??" bit_or)*
+
+?bit_or: bit_xor ("|" bit_xor)*
+?bit_xor: bit_and ("^" bit_and)*
+?bit_and: shift ("&" shift)*
+?shift: addsub (SHIFT_OP addsub)*
+SHIFT_OP: "<<" | ">>"
+
+?addsub: muldiv (ADDSUB_OP muldiv)*
+ADDSUB_OP: "+" | "-"
+
+?muldiv: power (MULDIV_OP power)*
+MULDIV_OP: "*" | "/" | "//" | "%"
+
+?power: unary (POWER unary)?
+POWER.3: "**"
+?unary: ADDSUB_OP unary    -> addsub_unary
+      | "~" unary          -> invert
+      | postfix_expr
+
+?postfix_expr: atom
+             | postfix_expr "(" args? ")"          -> call_expr
+             | postfix_expr "[" subscript "]"      -> index_expr
+             | postfix_expr "." NAME               -> attr_expr
+             | postfix_expr "?." NAME              -> safe_attr_expr
+
+// `xs[i]` is an index; `xs[a:b]` / `xs[:b]` / `xs[a:]` / `xs[:]` /
+// `xs[a:b:c]` are slices. Step-only forms with empty start/end (e.g.
+// `xs[::2]`) are not yet supported in M2 — use `xs[0::2]`.
+?subscript: expr                           -> sub_index
+          | expr ":" expr ":" expr         -> sub_slice3
+          | expr ":" expr                  -> sub_slice2
+          | expr ":"                       -> sub_slice_l
+          | ":" expr                       -> sub_slice_r
+          | ":"                            -> sub_slice_full
+
+args: arg ("," arg)* ","?
+?arg: NAME "=" expr -> kwarg
+    | "*" expr      -> star_arg
+    | "**" expr     -> dstar_arg
+    | expr          -> pos_arg
+
+?atom: NAME            -> name_ref
+     | NUMBER          -> number_lit
+     | STRING          -> string_lit
+     | "True"          -> true_lit
+     | "False"         -> false_lit
+     | "None"          -> none_lit
+     | paren_or_tuple
+     | list_lit
+     | dict_or_set
+     | lambda_expr
+     | each_expr
+
+paren_or_tuple: "(" paren_inner? ")"
+paren_inner: expr ("," expr)* ","?
+
+list_lit: "[" list_inner? "]"
+list_inner: expr ("," expr)* ","?
+
+dict_or_set: "{" dict_or_set_inner? "}"
+dict_or_set_inner: dict_item ("," dict_item)* ","?    -> dict_inner
+                 | expr ("," expr)+ ","?               -> set_inner
+                 | expr                                 -> set_inner_one
+
+dict_item: expr ":" expr     -> dict_kv
+         | "**" expr         -> dict_spread
+
+lambda_expr: "fn" "(" params? ")" return_type? lambda_body
+lambda_body: block            -> lambda_block_body
+           | "=" expr         -> lambda_expr_body
+
+each_expr: "each" NAME "in" expr_no_in each_parallel? each_where? block
+
+// ---------- Terminals ----------
+
+NAME: /[A-Za-z_][A-Za-z0-9_]*/
+
+NUMBER: /[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?/
+
+STRING.2: TRIPLE_STRING | RAW_STRING | SINGLE_STRING
+TRIPLE_STRING: /"""([^"\\]|\\.|"(?!""))*"""/
+             | /'''([^'\\]|\\.|'(?!''))*'''/
+RAW_STRING: /r"([^"\\]|\\.)*"/
+          | /r'([^'\\]|\\.)*'/
+SINGLE_STRING: /"([^"\\\n]|\\.)*"/
+             | /'([^'\\\n]|\\.)*'/
+
+COMMENT: /\#[^\n]*/
+
+// NOTE: only `#` is supported for line comments. Earlier versions also
+// accepted `// ...` C-style, but that conflicted with the floor-division
+// operator `//`. Use `#` for comments; `//` is always integer divide.
+
+_NL: /(\r?\n)+/
+
+%ignore /[ \t]+/
+%ignore /\\\r?\n/
+%ignore COMMENT

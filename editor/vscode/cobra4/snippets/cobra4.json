@@ -1,0 +1,191 @@
+{
+  "Function (block)": {
+    "prefix": ["fn", "func"],
+    "body": [
+      "fn ${1:name}(${2:args}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Block-bodied function"
+  },
+  "Function (inline)": {
+    "prefix": "fn=",
+    "body": "fn ${1:name}(${2:args}) = ${0:expr}",
+    "description": "Single-expression function"
+  },
+  "Lambda": {
+    "prefix": "lam",
+    "body": "fn(${1:x}) = ${0:expr}",
+    "description": "Inline lambda"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "\tfn __init__(self, ${2:args}) {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Class with constructor"
+  },
+  "Data class": {
+    "prefix": "dataclass",
+    "body": "data class ${1:Name}(${2:fields})",
+    "description": "Concise dataclass"
+  },
+  "If / else": {
+    "prefix": "ifelse",
+    "body": [
+      "if ${1:cond} {",
+      "\t${2:body}",
+      "} else {",
+      "\t${0:other}",
+      "}"
+    ]
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": [
+      "for ${1:x} in ${2:xs} {",
+      "\t$0",
+      "}"
+    ]
+  },
+  "Each (parallel fan-out)": {
+    "prefix": ["each", "parallel"],
+    "body": [
+      "each ${1:x} in ${2:xs} in parallel(workers=${3:8}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Parallel comprehension"
+  },
+  "Each (with where filter)": {
+    "prefix": "eachwhere",
+    "body": [
+      "each ${1:x} in ${2:xs} where ${3:cond} {",
+      "\t$0",
+      "}"
+    ]
+  },
+  "Match": {
+    "prefix": "match",
+    "body": [
+      "match ${1:value} {",
+      "\tcase ${2:pattern} {",
+      "\t\t$0",
+      "\t}",
+      "\tcase _ {",
+      "\t\t",
+      "\t}",
+      "}"
+    ]
+  },
+  "Try / catch / finally": {
+    "prefix": "try",
+    "body": [
+      "try {",
+      "\t${1:body}",
+      "} catch ${2:Exception} as e {",
+      "\t${0:handler}",
+      "}"
+    ]
+  },
+  "Every (cron)": {
+    "prefix": "every",
+    "body": [
+      "every ${1:5 minutes} {",
+      "\t$0",
+      "}"
+    ]
+  },
+  "On event from queue": {
+    "prefix": "onevent",
+    "body": [
+      "on event from queue(\"${1:name}\") {",
+      "\t$0",
+      "}"
+    ]
+  },
+  "HTTP handler (serve)": {
+    "prefix": "serve",
+    "body": [
+      "fn ${1:handler}(req) {",
+      "\t${0:return {\"ok\": True\\}}",
+      "}",
+      "",
+      "serve ${1} on :${2:8080}"
+    ]
+  },
+  "Deploy to AWS Lambda": {
+    "prefix": "deploylambda",
+    "body": [
+      "deploy ${1:handler} to aws.lambda(",
+      "\tregion=\"${2:us-east-1}\",",
+      "\tname=\"${3:my-fn}\",",
+      "\trole=\"${4:arn:aws:iam::123:role/lambda}\",",
+      ") {",
+      "\tenv from \".env\"",
+      "}"
+    ]
+  },
+  "Deploy to GCP Run": {
+    "prefix": "deploygcp",
+    "body": [
+      "deploy ${1:handler} to gcp.run(",
+      "\tproject=\"${2:my-project}\",",
+      "\tregion=\"${3:europe-west1}\",",
+      "\tname=\"${4:my-svc}\",",
+      ")"
+    ]
+  },
+  "Deploy to Kubernetes": {
+    "prefix": "deployk8s",
+    "body": [
+      "deploy ${1:handler} to k8s(",
+      "\timage=\"${2:repo/image:tag}\",",
+      "\tname=\"${3:my-app}\",",
+      "\treplicas=${4:2},",
+      ")"
+    ]
+  },
+  "Smart fn": {
+    "prefix": "smart",
+    "body": [
+      "@smart",
+      "fn ${1:name}(target) {",
+      "\t$0",
+      "}"
+    ]
+  },
+  "Use stdlib": {
+    "prefix": "useStd",
+    "body": "use cobra4.stdlib.${1|http,fs,data,time,strings,cli,test,json|} as ${2:$1}"
+  },
+  "Test function": {
+    "prefix": "testfn",
+    "body": [
+      "fn test_${1:name}() {",
+      "\t${2:t.assert_eq(${3:actual}, ${4:expected})}",
+      "\t$0",
+      "}"
+    ],
+    "description": "A cobra4 test (discovered by `c4 test`)"
+  },
+  "Read remote / file": {
+    "prefix": "read",
+    "body": "${1:data} = read(\"${2:./input.csv}\")$0"
+  },
+  "Save to file": {
+    "prefix": "save",
+    "body": "save(${1:value}, \"${2:./output.json}\")$0"
+  },
+  "Run on inventory in parallel": {
+    "prefix": "fleet",
+    "body": [
+      "hosts = inventory(\"${1:prod}\")",
+      "results = each h in hosts in parallel { run(\"${2:uptime}\", host=h) }$0"
+    ]
+  }
+}

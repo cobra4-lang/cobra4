@@ -1,0 +1,116 @@
+# Real webhook router: HTTP server with auth, validation, signed-payload
+# verification, and routed handlers backed by SQLite via the `sql` plugin.
+#
+# Run as a daemon:
+#     COBRA4_SQL_URL=sqlite:///./_orders.db c4 serve examples/10_webhook_router.c4
+#
+# Then POST to it:
+#     curl -X POST -H "Authorization: Bearer dev-token" \
+#          -H "Content-Type: application/json" \
+#          -d '{"id":"o1","total":42.5}' \
+#          http://127.0.0.1:8090/orders
+
+lang use sql
+
+use cobra4.stdlib.test as t
+use hmac as _hmac
+use hashlib as _hashlib
+
+# ---------- Bootstrap: create table on startup ----------
+
+sql_run("CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, total REAL, created_at TEXT)")
+
+# ---------- Auth helpers ----------
+
+fn require_bearer(req) {
+    "Extract bearer token from Authorization header. Returns the token or None."
+    auth = req?.headers?.authorization ?? ""
+    if not auth.startswith("Bearer ") {
+        return None
+    }
+    return auth[7:]
+}
+
+fn verify_signature(req, secret_value) {
+    "Verify an X-Signature: sha256=<hex> header against the body using HMAC-SHA256."
+    expected = req.headers.get("x-signature", "")
+    if not expected.startswith("sha256=") {
+        return False
+    }
+    digest = _hmac.new(secret_value.encode(), req.body, _hashlib.sha256).hexdigest()
+    return _hmac.compare_digest(expected[7:], digest)
+}
+
+# ---------- Handlers ----------
+
+fn handle_health(req) {
+    return {"ok": True, "ts": __import__("time").time()}
+}
+
+fn handle_get_orders(req) {
+    rows = sql_run("SELECT id, total, created_at FROM orders ORDER BY created_at DESC LIMIT 100")
+    return {"orders": rows, "count": len(rows)}
+}
+
+fn handle_get_order(req, order_id) {
+    rows = sql_run("SELECT id, total, created_at FROM orders WHERE id = :id", params={"id": order_id})
+    if len(rows) == 0 {
+        return (404, {"error": "not found", "id": order_id})
+    }
+    return rows[0]
+}
+
+fn handle_post_order(req) {
+    token = require_bearer(req)
+    if token is None or token != "dev-token" {
+        return (401, {"error": "unauthorized"})
+    }
+
+    payload = req.json()
+    if payload is None {
+        return (400, {"error": "missing body"})
+    }
+
+    match payload {
+        case {"id": oid, "total": total} {
+            sql_run(
+                "INSERT INTO orders (id, total, created_at) VALUES (:id, :total, datetime('now'))",
+                params={"id": oid, "total": total},
+            )
+            return (201, {"id": oid, "total": total, "stored": True})
+        }
+        case _ {
+            return (400, {"error": "invalid payload, want {id, total}"})
+        }
+    }
+}
+
+# ---------- Router ----------
+
+fn router(req) {
+    "Single-handler dispatcher. Pattern-matches on (method, path)."
+    match (req.method, req.path) {
+        case ("GET", "/health") {
+            return handle_health(req)
+        }
+        case ("GET", "/orders") {
+            return handle_get_orders(req)
+        }
+        case ("POST", "/orders") {
+            return handle_post_order(req)
+        }
+        case ("GET", path) if path.startswith("/orders/") {
+            order_id = path[len("/orders/"):]
+            return handle_get_order(req, order_id)
+        }
+        case _ {
+            return (404, {"error": "not found", "path": req.path})
+        }
+    }
+}
+
+# ---------- Mount ----------
+
+serve router on :8090
+
+log("webhook router ready", endpoints=["/health", "/orders"], port=8090)

@@ -1,0 +1,155 @@
+# cobra4 stdlib: data
+# Lightweight tabular helpers — operate on list[dict] (the shape `read("...csv")`
+# returns by default). For heavy lifting / large datasets use pandas/polars
+# directly via `use pandas`.
+
+fn select(rows, *keys) {
+    "Project each row to only the named keys."
+    out = []
+    for r in rows {
+        projected = {}
+        for k in keys {
+            projected[k] = r[k]
+        }
+        out.append(projected)
+    }
+    return out
+}
+
+fn where(rows, predicate) {
+    "Keep rows where predicate(row) is truthy."
+    return each r in rows where predicate(r) { r }
+}
+
+fn sort_by(rows, key, reverse=False) {
+    "Sort rows by a key name or callable. Stable sort."
+    if isinstance(key, str) {
+        return sorted(rows, key=fn(r) = r[key], reverse=reverse)
+    }
+    return sorted(rows, key=key, reverse=reverse)
+}
+
+fn group_by(rows, key) {
+    "Group rows by `key` (str name or callable). Returns dict[group → list]."
+    extractor = (fn(r) = r[key]) if isinstance(key, str) else key
+    out = {}
+    for r in rows {
+        k = extractor(r)
+        if k not in out {
+            out[k] = []
+        }
+        out[k].append(r)
+    }
+    return out
+}
+
+fn aggregate(rows, key, agg) {
+    "Group + aggregate. `agg` is a dict mapping output column to a callable taking the group rows. Returns a list of dicts with the group key plus each aggregated column."
+    extractor = (fn(r) = r[key]) if isinstance(key, str) else key
+    groups = group_by(rows, extractor)
+    out = []
+    for entry in groups.items() {
+        g = entry[0]
+        members = entry[1]
+        row = {}
+        if isinstance(key, str) {
+            row[key] = g
+        } else {
+            row["key"] = g
+        }
+        for col_entry in agg.items() {
+            row[col_entry[0]] = col_entry[1](members)
+        }
+        out.append(row)
+    }
+    return out
+}
+
+fn pluck(rows, key) {
+    "Extract one column to a flat list."
+    return each r in rows { r[key] }
+}
+
+fn unique(rows, key=None) {
+    "Distinct rows (optionally on one key)."
+    seen = set()
+    out = []
+    extractor = None
+    if key is None {
+        extractor = fn(r) = r
+    } elif isinstance(key, str) {
+        extractor = fn(r) = r[key]
+    } else {
+        extractor = key
+    }
+    for r in rows {
+        k = extractor(r)
+        try {
+            if k not in seen {
+                seen.add(k)
+                out.append(r)
+            }
+        } catch TypeError {
+            out.append(r)
+        }
+    }
+    return out
+}
+
+fn count(rows) = len(rows)
+
+fn sum_col(rows, key) {
+    "Sum of one column."
+    total = 0
+    for r in rows {
+        total += r[key]
+    }
+    return total
+}
+
+fn avg_col(rows, key) {
+    if len(rows) == 0 {
+        return 0
+    }
+    return sum_col(rows, key) / len(rows)
+}
+
+fn min_col(rows, key) {
+    return min(each r in rows { r[key] })
+}
+
+fn max_col(rows, key) {
+    return max(each r in rows { r[key] })
+}
+
+fn join(left, right, on, how="inner") {
+    "Join two row lists on the same key. Supports inner / left."
+    right_index = {}
+    for r in right {
+        k = r[on]
+        if k not in right_index {
+            right_index[k] = []
+        }
+        right_index[k].append(r)
+    }
+    out = []
+    for l in left {
+        matches = right_index.get(l[on], [])
+        if len(matches) == 0 and how == "left" {
+            out.append(l)
+            continue
+        }
+        for r in matches {
+            merged = dict(l)
+            merged.update(r)
+            out.append(merged)
+        }
+    }
+    return out
+}
+
+fn to_csv(rows, target) {
+    "Write rows to a CSV file (uses `save` smart-dispatch)."
+    save(rows, target)
+    return target
+}

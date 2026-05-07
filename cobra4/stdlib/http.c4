@@ -1,0 +1,114 @@
+# cobra4 stdlib: http
+# Convenience HTTP client with sessions, retries, auth, and headers.
+# Sits on top of the runtime's `read` smart-fn for simple GETs and
+# requests.Session for everything else.
+
+use requests as _r
+use time as _time
+
+class HttpError(Exception) {
+    fn __init__(self, message, status=None, body=None) {
+        super().__init__(message)
+        self.status = status
+        self.body = body
+    }
+}
+
+class Session {
+    "An HTTP session with persistent cookies, headers, retries."
+
+    fn __init__(self, base_url=None, headers=None, retries=2, backoff=0.3, timeout=30) {
+        self._sess = _r.Session()
+        self.base_url = base_url
+        self.retries = retries
+        self.backoff = backoff
+        self.timeout = timeout
+        if headers is not None {
+            self._sess.headers.update(headers)
+        }
+    }
+
+    fn _url(self, path) {
+        if self.base_url is None or path.startswith("http") {
+            return path
+        }
+        return self.base_url.rstrip("/") + "/" + path.lstrip("/")
+    }
+
+    fn auth_bearer(self, token) {
+        "Set Authorization: Bearer <token>."
+        self._sess.headers["Authorization"] = "Bearer {token}"
+        return self
+    }
+
+    fn auth_basic(self, user, password) {
+        "Set Basic auth."
+        self._sess.auth = (user, password)
+        return self
+    }
+
+    fn request(self, method, path, **kwargs) {
+        "Issue a request with retry on connection failures and 5xx."
+        kwargs.setdefault("timeout", self.timeout)
+        url = self._url(path)
+        last_exc = None
+        for attempt in range(self.retries + 1) {
+            try {
+                resp = self._sess.request(method, url, **kwargs)
+                if resp.status_code >= 500 and attempt < self.retries {
+                    _time.sleep(self.backoff * (2 ** attempt))
+                    continue
+                }
+                return resp
+            } catch _r.exceptions.RequestException as e {
+                last_exc = e
+                if attempt >= self.retries {
+                    raise HttpError("connection failed: {e}")
+                }
+                _time.sleep(self.backoff * (2 ** attempt))
+            }
+        }
+        raise HttpError("retries exhausted")
+    }
+
+    fn get(self, path, **kw) = self.request("GET", path, **kw)
+    fn post(self, path, **kw) = self.request("POST", path, **kw)
+    fn put(self, path, **kw) = self.request("PUT", path, **kw)
+    fn delete(self, path, **kw) = self.request("DELETE", path, **kw)
+    fn patch(self, path, **kw) = self.request("PATCH", path, **kw)
+
+    fn get_json(self, path, **kw) {
+        "GET and decode JSON. Raises HttpError on non-2xx."
+        resp = self.get(path, **kw)
+        if not (200 <= resp.status_code < 300) {
+            raise HttpError("GET {path} → {resp.status_code}", status=resp.status_code, body=resp.text)
+        }
+        return resp.json()
+    }
+
+    fn post_json(self, path, body, **kw) {
+        "POST a dict as JSON; return the decoded JSON response."
+        kw.setdefault("json", body)
+        resp = self.post(path, **kw)
+        if not (200 <= resp.status_code < 300) {
+            raise HttpError("POST {path} → {resp.status_code}", status=resp.status_code, body=resp.text)
+        }
+        return resp.json()
+    }
+}
+
+# Convenience module-level helpers (no shared session).
+
+fn get(url, **kw) = Session().get(url, **kw)
+fn get_json(url, **kw) = Session().get_json(url, **kw)
+fn post_json(url, body, **kw) = Session().post_json(url, body, **kw)
+
+fn ok(status) {
+    "True for 2xx HTTP statuses."
+    return status >= 200 and status < 300
+}
+
+fn fetch_all(urls, workers=8) {
+    "Fetch many URLs in parallel via the runtime's smart `read`. Auto-decodes."
+    return each u in urls in parallel(workers=workers) { read(u) }
+}

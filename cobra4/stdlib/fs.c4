@@ -1,0 +1,87 @@
+# cobra4 stdlib: fs
+# Filesystem helpers — convenience wrappers around os/pathlib/shutil.
+
+use os as _os
+use shutil as _shutil
+use pathlib as _pathlib
+
+fn exists(path) {
+    "True if the path exists on the local filesystem."
+    return _os.path.exists(path)
+}
+
+fn ensure_dir(path) {
+    "Create a directory (and parents) if missing. Idempotent."
+    _pathlib.Path(path).mkdir(parents=True, exist_ok=True)
+    return path
+}
+
+fn list_dir(path, pattern="*") {
+    "List entries in `path`, optionally filtered by glob pattern."
+    return each p in _pathlib.Path(path).glob(pattern) { str(p) }
+}
+
+fn walk(path, pattern="*") {
+    "Recursively list all files matching glob pattern."
+    return each p in _pathlib.Path(path).rglob(pattern) where p.is_file() { str(p) }
+}
+
+fn rm(path) {
+    "Remove a file (best-effort, ignores missing)."
+    if exists(path) {
+        _os.remove(path)
+    }
+}
+
+fn rmtree(path) {
+    "Remove a directory tree. Idempotent on missing path."
+    if exists(path) {
+        _shutil.rmtree(path)
+    }
+}
+
+fn copy(src, dst) {
+    "Copy a file. Creates parent dirs as needed."
+    ensure_dir(_os.path.dirname(_os.path.abspath(dst)))
+    _shutil.copy2(src, dst)
+    return dst
+}
+
+fn copy_tree(src, dst) {
+    "Recursively copy a directory tree. dst must NOT exist (or be empty)."
+    _shutil.copytree(src, dst, dirs_exist_ok=True)
+    return dst
+}
+
+fn move(src, dst) {
+    "Move a file or directory."
+    return _shutil.move(src, dst)
+}
+
+fn size(path) {
+    "Bytes used by file (0 if missing)."
+    if not exists(path) { return 0 }
+    return _os.path.getsize(path)
+}
+
+fn mtime(path) {
+    "Last-modified UNIX timestamp (float). None if missing."
+    if not exists(path) { return None }
+    return _os.path.getmtime(path)
+}
+
+fn read_text(path, encoding="utf-8") {
+    "Convenience for reading a text file (no smart dispatch)."
+    return _pathlib.Path(path).read_text(encoding=encoding)
+}
+
+fn write_text(path, text, encoding="utf-8") {
+    "Convenience for writing a text file. NOT atomic — use save() for atomicity."
+    ensure_dir(_os.path.dirname(_os.path.abspath(path)) or ".")
+    _pathlib.Path(path).write_text(text, encoding=encoding)
+    return path
+}
+
+fn home() = str(_pathlib.Path.home())
+fn cwd() = _os.getcwd()
+fn join(*parts) = _os.path.join(*parts)

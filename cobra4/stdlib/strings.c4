@@ -1,0 +1,73 @@
+# cobra4 stdlib: strings
+# String manipulation helpers — slugify, truncate, dedent, format.
+
+use re as _re
+use textwrap as _tw
+
+fn slugify(s) {
+    "Convert any string to a URL-safe slug. Lowercase + dashes."
+    s = s.lower().strip()
+    s = _re.sub(r"[^a-z0-9]+", "-", s)
+    return s.strip("-")
+}
+
+fn truncate(s, max_len, suffix="...") {
+    "Trim string to max_len, adding suffix if truncated."
+    if len(s) <= max_len {
+        return s
+    }
+    return s[:max_len - len(suffix)] + suffix
+}
+
+fn dedent(s) = _tw.dedent(s)
+fn indent(s, prefix) = _tw.indent(s, prefix)
+fn wrap(s, width=80) = _tw.fill(s, width=width)
+
+fn lines(s) {
+    "Split into lines, dropping trailing newline."
+    return s.splitlines()
+}
+
+fn camel_to_snake(s) {
+    "fooBarBaz becomes foo_bar_baz."
+    return _re.sub(r"([a-z])([A-Z])", r"\1_\2", s).lower()
+}
+
+fn snake_to_camel(s) {
+    "`foo_bar_baz` → `fooBarBaz`."
+    parts = s.split("_")
+    head = parts[0]
+    tail = each p in parts[1:] { p.capitalize() }
+    return head + "".join(tail)
+}
+
+fn ellipsize(s, max_len=80) = truncate(s, max_len, "…")
+
+fn pad_left(s, width, char=" ") = s.rjust(width, char)
+fn pad_right(s, width, char=" ") = s.ljust(width, char)
+
+fn count_lines(s) = len(s.splitlines())
+
+fn replace_all(s, mapping) {
+    "Apply many literal replacements from a dict mapping old to new."
+    for entry in mapping.items() {
+        s = s.replace(entry[0], entry[1])
+    }
+    return s
+}
+
+fn matches(s, pattern) {
+    "True if regex pattern matches anywhere in s."
+    return _re.search(pattern, s) is not None
+}
+
+fn extract(s, pattern, group=0) {
+    "First regex match, or None."
+    m = _re.search(pattern, s)
+    return m.group(group) if m else None
+}
+
+fn extract_all(s, pattern) {
+    "All non-overlapping regex matches as list[str]."
+    return _re.findall(pattern, s)
+}

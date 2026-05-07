@@ -1,0 +1,154 @@
+{
+  "name": "cobra4",
+  "displayName": "cobra4",
+  "description": "Language support for cobra4: syntax highlighting, LSP (diagnostics, format, hover, go-to-def, references, completion), snippets, and run/test/build commands.",
+  "version": "0.1.0",
+  "publisher": "cobra4-lang",
+  "license": "MIT",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages", "Formatters", "Linters", "Snippets"],
+  "keywords": ["cobra4", "language", "transpiler", "cloud", "dsl"],
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cobra4-lang/cobra4"
+  },
+  "activationEvents": [
+    "onLanguage:cobra4"
+  ],
+  "main": "./client/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "cobra4",
+        "aliases": ["cobra4", "c4"],
+        "extensions": [".c4"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cobra4",
+        "scopeName": "source.cobra4",
+        "path": "./syntaxes/cobra4.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "cobra4",
+        "path": "./snippets/cobra4.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "cobra4",
+      "properties": {
+        "cobra4.executable": {
+          "type": "string",
+          "default": "c4",
+          "description": "Path to the cobra4 CLI. Use 'c4' if it's on PATH; otherwise an absolute path."
+        },
+        "cobra4.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the cobra4 language server for diagnostics, hover, definition, references, format."
+        },
+        "cobra4.format.onSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run `c4 fmt` on save."
+        },
+        "cobra4.check.strict": {
+          "type": "boolean",
+          "default": false,
+          "description": "Pass --strict to `c4 check` (treat warnings as errors)."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "cobra4.run",
+        "title": "cobra4: Run File",
+        "category": "cobra4"
+      },
+      {
+        "command": "cobra4.build",
+        "title": "cobra4: Build to Python",
+        "category": "cobra4"
+      },
+      {
+        "command": "cobra4.fmt",
+        "title": "cobra4: Format File",
+        "category": "cobra4"
+      },
+      {
+        "command": "cobra4.check",
+        "title": "cobra4: Check (lint + types)",
+        "category": "cobra4"
+      },
+      {
+        "command": "cobra4.test",
+        "title": "cobra4: Run Tests",
+        "category": "cobra4"
+      },
+      {
+        "command": "cobra4.serve",
+        "title": "cobra4: Serve (daemon mode)",
+        "category": "cobra4"
+      },
+      {
+        "command": "cobra4.restartLSP",
+        "title": "cobra4: Restart Language Server",
+        "category": "cobra4"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "when": "editorLangId == cobra4",
+          "command": "cobra4.run",
+          "group": "cobra4@1"
+        },
+        {
+          "when": "editorLangId == cobra4",
+          "command": "cobra4.fmt",
+          "group": "cobra4@2"
+        }
+      ],
+      "commandPalette": [
+        { "command": "cobra4.run",        "when": "editorLangId == cobra4" },
+        { "command": "cobra4.build",      "when": "editorLangId == cobra4" },
+        { "command": "cobra4.fmt",        "when": "editorLangId == cobra4" },
+        { "command": "cobra4.check",      "when": "editorLangId == cobra4" },
+        { "command": "cobra4.test" },
+        { "command": "cobra4.serve",      "when": "editorLangId == cobra4" },
+        { "command": "cobra4.restartLSP" }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "cobra4.run",
+        "key": "ctrl+f5",
+        "mac": "cmd+f5",
+        "when": "editorLangId == cobra4"
+      },
+      {
+        "command": "cobra4.test",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
+        "when": "editorLangId == cobra4"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "echo 'no build step'",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^2.24.0"
+  }
+}

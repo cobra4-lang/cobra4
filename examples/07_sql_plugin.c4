@@ -1,0 +1,11 @@
+# Demonstrates the M5 language-plugin system: `lang use sql` enables
+# embedded SQL blocks. The plugin pre-processes `sql { ... }` into a
+# call to the runtime helper `sql_run`, which in M5 just logs the query.
+
+lang use sql
+
+rows = sql {
+    SELECT id, name, age FROM users WHERE age >= 18 ORDER BY name
+}
+
+log("rows fetched", count=len(rows))

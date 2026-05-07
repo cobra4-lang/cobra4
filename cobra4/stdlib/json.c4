@@ -1,0 +1,19 @@
+# cobra4 stdlib: json
+# JSON helpers built on top of Python's stdlib json module.
+
+use json as _py_json
+
+fn loads(text) {
+    "Parse a JSON string."
+    return _py_json.loads(text)
+}
+
+fn dumps(value, indent=None) {
+    "Serialize a value as JSON. Pass indent=2 for pretty-printing."
+    return _py_json.dumps(value, indent=indent, default=str)
+}
+
+fn pretty(value) {
+    "Pretty-print: shorthand for dumps(value, indent=2)."
+    return dumps(value, indent=2)
+}

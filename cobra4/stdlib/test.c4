@@ -1,0 +1,94 @@
+# cobra4 stdlib: test
+# Native testing helpers — assertion DSL + fixtures usable from .c4 files.
+# `c4 test` discovers `tests/test_*.c4` files and runs each top-level fn
+# starting with `test_` as an isolated test case.
+
+class AssertionFailed(Exception) {
+    fn __init__(self, msg) {
+        super().__init__(msg)
+    }
+}
+
+fn fail(msg) {
+    "Unconditionally fail the current test."
+    raise AssertionFailed(msg)
+}
+
+fn assert_eq(actual, expected, msg=None) {
+    "Assert two values are equal (==)."
+    if actual != expected {
+        text = msg ?? "expected {expected!r}, got {actual!r}"
+        raise AssertionFailed(text)
+    }
+}
+
+fn assert_ne(actual, unexpected, msg=None) {
+    "Assert two values are NOT equal."
+    if actual == unexpected {
+        text = msg ?? "expected anything but {unexpected!r}, got {actual!r}"
+        raise AssertionFailed(text)
+    }
+}
+
+fn assert_true(value, msg=None) {
+    "Assert that a value is truthy."
+    if not value {
+        text = msg ?? "expected truthy, got {value!r}"
+        raise AssertionFailed(text)
+    }
+}
+
+fn assert_false(value, msg=None) {
+    "Assert that a value is falsy."
+    if value {
+        text = msg ?? "expected falsy, got {value!r}"
+        raise AssertionFailed(text)
+    }
+}
+
+fn assert_in(needle, haystack, msg=None) {
+    "Assert that needle is contained in haystack."
+    if needle not in haystack {
+        text = msg ?? "{needle!r} not found in {haystack!r}"
+        raise AssertionFailed(text)
+    }
+}
+
+fn assert_close(actual, expected, tolerance=1e-7, msg=None) {
+    "Assert two floats are close within tolerance."
+    delta = abs(actual - expected)
+    if delta > tolerance {
+        text = msg ?? "{actual} not close to {expected} (delta {delta} > {tolerance})"
+        raise AssertionFailed(text)
+    }
+}
+
+fn assert_raises(exc_type, fn_to_call) {
+    "Assert that calling fn_to_call raises exc_type. Returns the exception."
+    try {
+        fn_to_call()
+    } catch Exception as e {
+        if isinstance(e, exc_type) {
+            return e
+        }
+        raise AssertionFailed("expected {exc_type.__name__}, got {type(e).__name__}: {e}")
+    }
+    raise AssertionFailed("expected {exc_type.__name__} to be raised, nothing was raised")
+}
+
+# Lightweight `expect(value).to(...)` chaining for fluent assertions.
+
+class Expectation {
+    fn __init__(self, value) {
+        self.value = value
+    }
+
+    fn to_eq(self, other) { assert_eq(self.value, other) }
+    fn to_ne(self, other) { assert_ne(self.value, other) }
+    fn to_be_truthy(self) { assert_true(self.value) }
+    fn to_be_falsy(self) { assert_false(self.value) }
+    fn to_contain(self, needle) { assert_in(needle, self.value) }
+    fn to_be_close(self, other, tolerance=1e-7) { assert_close(self.value, other, tolerance) }
+}
+
+fn expect(value) = Expectation(value)

@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.pytest_cache/
+.venv/
+venv/
+.env
+build/
+dist/
+*.pymap
+
+# VS Code extension build artifacts
+editor/vscode/cobra4/node_modules/
+editor/vscode/cobra4/*.vsix
+editor/vscode/cobra4/package-lock.json
+
+# Local Claude/AI agent notes — never commit
+CLAUDE.local.md
+.claude/

@@ -1,0 +1,87 @@
+# cobra4 stdlib: cli
+# Light-weight CLI helper — argparse-equivalent without the boilerplate.
+# Designed for quick scripts: define a handful of flags + positional args,
+# get a parsed dict, run.
+
+use argparse as _ap
+use sys as _sys
+
+class App {
+    "A tiny CLI builder. Define flags, options, and positional args; call parse() to get a dict."
+
+    fn __init__(self, description=None, prog=None) {
+        self._parser = _ap.ArgumentParser(prog=prog, description=description)
+        self._subparsers = None
+    }
+
+    fn flag(self, name, help=None) {
+        "Boolean switch: present means True."
+        self._parser.add_argument(name, action="store_true", help=help)
+        return self
+    }
+
+    fn option(self, name, default=None, type=None, choices=None, help=None, required=False) {
+        "Named option with a value. type defaults to str."
+        kwargs = {"default": default, "help": help, "required": required}
+        if type is not None { kwargs["type"] = type }
+        if choices is not None { kwargs["choices"] = choices }
+        self._parser.add_argument(name, **kwargs)
+        return self
+    }
+
+    fn arg(self, name, help=None, nargs=None, type=None) {
+        "Positional argument."
+        kwargs = {"help": help}
+        if nargs is not None { kwargs["nargs"] = nargs }
+        if type is not None { kwargs["type"] = type }
+        self._parser.add_argument(name, **kwargs)
+        return self
+    }
+
+    fn subcommand(self, name, help=None) {
+        "Add a sub-command. Returns a new App scoped to it."
+        if self._subparsers is None {
+            self._subparsers = self._parser.add_subparsers(dest="cmd")
+        }
+        sub = App.__new__(App)
+        sub._parser = self._subparsers.add_parser(name, help=help)
+        sub._subparsers = None
+        return sub
+    }
+
+    fn parse(self, argv=None) {
+        "Parse argv and return the namespace as a dict."
+        ns = self._parser.parse_args(argv if argv is not None else _sys.argv[1:])
+        return vars(ns)
+    }
+
+    fn print_help(self) {
+        self._parser.print_help()
+    }
+}
+
+use inspect as _insp
+
+fn quick(handler, description=None) {
+    "One-liner CLI: introspects the handler's signature and exposes it as flags/options."
+    app = App(description=description)
+    sig = _insp.signature(handler)
+    for entry in sig.parameters.items() {
+        name = entry[0]
+        p = entry[1]
+        if p.default is _insp.Parameter.empty {
+            app.arg(name)
+        } else {
+            kw_default = p.default
+            if isinstance(kw_default, bool) {
+                app.flag("--" + name.replace("_", "-"))
+            } else {
+                tname = type(kw_default).__name__
+                ty = int if tname == "int" else (float if tname == "float" else str)
+                app.option("--" + name.replace("_", "-"), default=kw_default, type=ty)
+            }
+        }
+    }
+    args = app.parse()
+    return handler(**args)
+}

@@ -1,0 +1,29 @@
+# Tiny ETL: synthesize a CSV, transform it, save as JSON.
+# Demonstrates: smart read/save roundtrip across formats, for-loop
+# over rows, in-place dict construction.
+
+# Materialize a small dataset on disk.
+seed = [
+    {"name": "ada", "age": 36},
+    {"name": "lin", "age": 41},
+    {"name": "tim", "age": 22},
+    {"name": "bea", "age": 17},
+]
+save(seed, "./_etl_input.csv")
+
+# Read back through smart-dispatch (csv → list[dict]).
+rows = read("./_etl_input.csv")
+
+# Transform: keep adults, normalize names to upper case.
+adults = []
+for r in rows {
+    age = int(r["age"])
+    if age >= 18 {
+        adults.append({"name": r["name"].upper(), "age": age})
+    }
+}
+
+# Save in a different format — handler picks JSON automatically.
+save(adults, "./_etl_output.json")
+
+log("etl done", input=len(rows), output=len(adults))

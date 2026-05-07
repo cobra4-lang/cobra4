@@ -1,0 +1,17 @@
+# An inline HTTP handler registered via the `serve ... on :port` syntax.
+# In M1, `serve` registers the handler in the runtime; the daemon mode
+# (M4) actually binds and listens. This example demonstrates the syntax
+# and shows how to inspect the registry.
+
+use cobra4.runtime.core as rt
+
+fn api(req) {
+    name = req?.params?.name ?? "world"
+    return {"hello": name}
+}
+
+serve api on :8080
+
+# In M1, no actual server starts — verify registration:
+entries = rt.serve_registry()
+log("serve registered", count=len(entries), port=entries[0].port)

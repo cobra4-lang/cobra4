@@ -1,0 +1,22 @@
+# Word count over a local text file (the README itself).
+# Demonstrates: read auto-detects the format from the URI/extension,
+# for + dict accumulation, save round-trips to JSON.
+
+text = read("./README.md")
+counts = {}
+
+for w in text.split() {
+    key = w.lower()
+    counts[key] = counts.get(key, 0) + 1
+}
+
+all_words = sorted(counts.items(), key=fn(kv) = kv[1], reverse=True)
+top = all_words[:10]
+
+log("top words", n=len(top))
+
+out = []
+for kv in top {
+    out.append({"word": kv[0], "count": kv[1]})
+}
+save(out, "./out_wordcount.json")

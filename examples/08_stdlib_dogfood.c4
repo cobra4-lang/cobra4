@@ -1,0 +1,27 @@
+# Demonstrates the stdlib written in cobra4 itself.
+# Modules under cobra4/stdlib/*.c4 are loaded via a custom import hook;
+# the same `read`/`save`/`each ... in parallel` you've been using are
+# now exposed through ergonomic helpers.
+
+use cobra4.stdlib.http as http
+use cobra4.stdlib.json as j
+use cobra4.stdlib.fs as fs
+
+# `where` filter (Wave 1) + cobra4 list-comprehension via `each`.
+files = fs.list_dir("examples", "*.c4")
+keep = each f in files where f.endswith(".c4") { f }
+
+log("examples found", count=len(keep))
+
+# The whole pipeline: list dir, count lines per file, save as JSON.
+report = []
+for f in files where f.endswith(".c4") {
+    text = read(f)
+    report.append({"file": f, "lines": len(text.split("\n"))})
+}
+
+save(report, "./_stdlib_report.json")
+log("report written", file="./_stdlib_report.json", entries=len(report))
+
+# Pretty-print via stdlib helper.
+print(j.pretty(report))

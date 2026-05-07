@@ -1,0 +1,32 @@
+# Parallel "health check" over a list of URLs.
+# Demonstrates: each ... in parallel { ... } as an expression returning a list,
+# safe_attr (?.) and default (??) operators, structured logging.
+
+hosts = [
+    "https://www.google.com",
+    "https://www.python.org",
+    "https://www.invalid-host-doesnotexist.local",
+]
+
+fn check(url) {
+    try {
+        resp = read(url)
+        return {"url": url, "ok": True, "size": len(resp)}
+    } catch Exception as e {
+        return {"url": url, "ok": False, "error": str(e)}
+    }
+}
+
+results = each url in hosts in parallel(workers=8) { check(url) }
+
+ok_count = 0
+for r in results {
+    if r["ok"] {
+        ok_count = ok_count + 1
+        log("up", url=r["url"], size=r["size"])
+    } else {
+        log.warn("down", url=r["url"], error=r["error"])
+    }
+}
+
+log("summary", ok=ok_count, total=len(results))

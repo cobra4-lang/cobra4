@@ -1,0 +1,83 @@
+# cobra4 stdlib: time
+# Time / duration / date helpers around the Python stdlib.
+
+use time as _t
+use datetime as _dt
+
+# ---------- Duration parsing ----------
+
+fn parse_duration(s) {
+    "Parse a duration string like 30s / 5m / 2h / 1d (also composites like 1h30m) to seconds (float). Returns 0 on empty input."
+    if not s { return 0 }
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+    total = 0.0
+    num = ""
+    for c in s {
+        if c.isdigit() or c == "." {
+            num = num + c
+        } elif c in units {
+            total = total + float(num or "0") * units[c]
+            num = ""
+        }
+    }
+    if num {
+        total = total + float(num)
+    }
+    return total
+}
+
+fn fmt_duration(seconds) {
+    "Inverse of parse_duration: human-friendly format. 90 becomes 1m30s."
+    if seconds < 0 {
+        return "-" + fmt_duration(-seconds)
+    }
+    parts = []
+    units = [("d", 86400), ("h", 3600), ("m", 60), ("s", 1)]
+    for u in units {
+        label = u[0]
+        factor = u[1]
+        if seconds >= factor {
+            n = int(seconds // factor)
+            parts.append("{n}{label}")
+            seconds = seconds - n * factor
+        }
+    }
+    return "".join(parts) if len(parts) > 0 else "0s"
+}
+
+# ---------- Wall clock ----------
+
+fn now() = _t.time()                # UNIX timestamp (float)
+fn now_utc() = _dt.datetime.now(_dt.timezone.utc)
+fn now_iso() = now_utc().isoformat(timespec="seconds")
+fn sleep(seconds) { _t.sleep(seconds) }
+
+# ---------- Monotonic / timing ----------
+
+fn monotonic() = _t.monotonic()
+
+class Timer {
+    "Context-managed timer. Construct, run code, call .ms_elapsed() or .stop()."
+
+    fn __init__(self) {
+        self.start = _t.monotonic()
+        self.end = None
+    }
+
+    fn stop(self) {
+        self.end = _t.monotonic()
+        return self
+    }
+
+    fn ms_elapsed(self) {
+        end = self.end if self.end is not None else _t.monotonic()
+        return (end - self.start) * 1000
+    }
+}
+
+# ---------- Parsing ISO ----------
+
+fn parse_iso(s) {
+    "Parse an ISO 8601 datetime string. Aware datetime."
+    return _dt.datetime.fromisoformat(s)
+}

@@ -1,0 +1,228 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "cobra4",
+  "scopeName": "source.cobra4",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#lang-directive" },
+    { "include": "#decorators" },
+    { "include": "#fn-decl" },
+    { "include": "#class-decl" },
+    { "include": "#keywords-control" },
+    { "include": "#keywords-cloud" },
+    { "include": "#keywords-other" },
+    { "include": "#constants" },
+    { "include": "#operators" },
+    { "include": "#types" },
+    { "include": "#builtins" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.cobra4",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.triple.double.cobra4",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "patterns": [
+            { "include": "#string-interp" },
+            { "include": "#string-escape" }
+          ]
+        },
+        {
+          "name": "string.quoted.triple.single.cobra4",
+          "begin": "'''",
+          "end": "'''",
+          "patterns": [
+            { "include": "#string-interp" },
+            { "include": "#string-escape" }
+          ]
+        },
+        {
+          "name": "string.quoted.raw.cobra4",
+          "begin": "r\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.cobra4", "match": "\\\\." }
+          ]
+        },
+        {
+          "name": "string.quoted.raw.single.cobra4",
+          "begin": "r'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.cobra4", "match": "\\\\." }
+          ]
+        },
+        {
+          "name": "string.quoted.double.cobra4",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#string-interp" },
+            { "include": "#string-escape" }
+          ]
+        },
+        {
+          "name": "string.quoted.single.cobra4",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "include": "#string-interp" },
+            { "include": "#string-escape" }
+          ]
+        }
+      ]
+    },
+    "string-interp": {
+      "name": "meta.embedded.expression.cobra4",
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        { "include": "$self" }
+      ]
+    },
+    "string-escape": {
+      "name": "constant.character.escape.cobra4",
+      "match": "\\\\(n|t|r|\\\\|\"|'|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4})"
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.cobra4",
+          "match": "\\b\\d+\\.\\d+([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.cobra4",
+          "match": "\\b\\d+([eE][+-]?\\d+)?\\b"
+        }
+      ]
+    },
+    "lang-directive": {
+      "match": "^\\s*(lang)\\s+(use)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.control.import.cobra4" },
+        "2": { "name": "keyword.control.import.cobra4" },
+        "3": { "name": "entity.name.namespace.cobra4" }
+      }
+    },
+    "decorators": {
+      "match": "(@)([A-Za-z_][A-Za-z0-9_.]*)",
+      "captures": {
+        "1": { "name": "punctuation.definition.decorator.cobra4" },
+        "2": { "name": "entity.name.function.decorator.cobra4" }
+      }
+    },
+    "fn-decl": {
+      "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "storage.type.function.cobra4" },
+        "2": { "name": "entity.name.function.cobra4" }
+      }
+    },
+    "class-decl": {
+      "match": "\\b(class|data\\s+class)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "storage.type.class.cobra4" },
+        "2": { "name": "entity.name.class.cobra4" }
+      }
+    },
+    "keywords-control": {
+      "patterns": [
+        {
+          "name": "keyword.control.cobra4",
+          "match": "\\b(if|elif|else|while|for|each|in|where|match|case|try|catch|finally|return|raise|break|continue|pass|do|with)\\b"
+        }
+      ]
+    },
+    "keywords-cloud": {
+      "patterns": [
+        {
+          "name": "keyword.cloud.cobra4",
+          "match": "\\b(every|on|from|to|parallel|serve|deploy)\\b"
+        }
+      ]
+    },
+    "keywords-other": {
+      "patterns": [
+        {
+          "name": "keyword.other.cobra4",
+          "match": "\\b(use|as|fn|class|data)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.cobra4",
+          "match": "\\b(and|or|not|is|is\\s+not|in|not\\s+in)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.cobra4",
+          "match": "\\b(True|False|None)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.safe-nav.cobra4",
+          "match": "\\?\\."
+        },
+        {
+          "name": "keyword.operator.nullish.cobra4",
+          "match": "\\?\\?"
+        },
+        {
+          "name": "keyword.operator.assignment.compound.cobra4",
+          "match": "\\+=|-=|\\*=|/=|//=|%=|\\*\\*=|&=|\\|=|\\^=|<<=|>>="
+        },
+        {
+          "name": "keyword.operator.comparison.cobra4",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.cobra4",
+          "match": "\\*\\*|//|\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.bitwise.cobra4",
+          "match": "&|\\||\\^|~|<<|>>"
+        },
+        {
+          "name": "keyword.operator.assignment.cobra4",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arrow.cobra4",
+          "match": "->"
+        }
+      ]
+    },
+    "types": {
+      "match": "\\b(int|float|str|bool|bytes|list|dict|set|tuple|Any|None|Path|URL|Table|Stream|Host|Cluster|Secret|Duration|Datetime|Callable|Optional)\\b",
+      "name": "support.type.cobra4"
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "match": "\\b(print|len|range|sorted|enumerate|zip|map|filter|sum|min|max|abs|any|all|isinstance|issubclass|type|repr|str|int|float|bool|list|dict|set|tuple|open)\\b",
+          "name": "support.function.builtin.python.cobra4"
+        },
+        {
+          "match": "\\b(read|save|log|smart|inventory|run|fan_out|secret|queue|every|on_event|parallel_for|deploy|serve_forever|env_from|aws|gcp|azure|k8s|fly|Host)\\b",
+          "name": "support.function.builtin.cobra4"
+        }
+      ]
+    }
+  }
+}

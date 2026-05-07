@@ -1,0 +1,22 @@
+# Cron-style scheduling — `every N seconds { ... }` registers a callback;
+# in M1 no daemon runs by default, so we manually drive the registry.
+
+use cobra4.runtime.core as rt
+
+state = {"ticks": 0}
+
+fn tick() {
+    state["ticks"] = state["ticks"] + 1
+    log("tick", ticks=state["ticks"])
+}
+
+every 1 seconds {
+    tick()
+}
+
+# Drive the registry in M1: invoke each registered callback once.
+rt.run_scheduled_once()
+rt.run_scheduled_once()
+rt.run_scheduled_once()
+
+log("done", final=state["ticks"])
