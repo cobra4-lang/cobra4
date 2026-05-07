@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://cobra4-lang.github.io/cobra4/
+    about: Language reference, smart dispatch, LSP, deploy adapters.
+  - name: Discussion
+    url: https://github.com/cobra4-lang/cobra4/discussions
+    about: Questions, design ideas, "is this the right approach for X?".

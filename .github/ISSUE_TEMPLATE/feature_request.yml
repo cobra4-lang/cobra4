@@ -1,0 +1,58 @@
+name: Feature request
+description: Suggest a new language feature, stdlib helper, plugin, CLI command, or LSP capability.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        New surface area is a long-term commitment, so the *why* matters
+        more than the *what*. A concrete use case beats an abstract
+        wishlist every time.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem this solves
+      description: What are you trying to do today, and why does the current language / CLI / stdlib make it awkward?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        Sketch what the cobra4 / CLI / API would look like if this existed.
+      placeholder: |
+        ```cobra4
+        # before
+        ...
+
+        # after — proposed
+        ...
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What's the workaround today? Why isn't it good enough?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Language (parser, AST, codegen)
+        - Type checker / lint
+        - Runtime (smart dispatch, fleet, secrets, deploy)
+        - Stdlib (.c4 modules)
+        - Language plugin (sql / regex / yaml / new)
+        - CLI / tooling
+        - LSP / IDE
+        - Docs
+        - Other
+    validations:
+      required: true

@@ -9,6 +9,10 @@ distributed jobs to first-class language constructs. *One line of cobra4
 often replaces a small Python program.*
 
 [![CI](https://github.com/cobra4-lang/cobra4/actions/workflows/ci.yml/badge.svg)](https://github.com/cobra4-lang/cobra4/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/cobra4.svg?label=PyPI)](https://pypi.org/project/cobra4/)
+[![Downloads](https://img.shields.io/pypi/dm/cobra4.svg?label=pip%20installs%2Fmonth)](https://pypi.org/project/cobra4/)
+[![Open VSX](https://img.shields.io/open-vsx/v/cobra4-lang/cobra4?label=Open%20VSX)](https://open-vsx.org/extension/cobra4-lang/cobra4)
+[![Docs](https://img.shields.io/badge/docs-cobra4--lang.github.io-1f6feb)](https://cobra4-lang.github.io/cobra4/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
@@ -16,8 +20,11 @@ often replaces a small Python program.*
 pip install cobra4              # CLI: c4 run | build | check | fmt | repl | lsp | serve
 ```
 
-VS Code extension: *coming soon* (Marketplace). Local install:
-[`editor/vscode/cobra4`](editor/vscode/cobra4).
+VS Code extension: install from the
+[Open VSX registry](https://open-vsx.org/extension/cobra4-lang/cobra4)
+(Cursor, VSCodium, code-server) or from
+[`editor/vscode/cobra4`](editor/vscode/cobra4) for a local build. The
+official VS Code Marketplace listing is *coming soon*.
 
 ---
 

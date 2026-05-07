@@ -61,6 +61,18 @@ nav:
       - CLI reference: tooling/cli.md
       - LSP / IDE setup: tooling/lsp.md
       - Test framework: tooling/test.md
+  - Examples:
+      - Overview: examples/index.md
+      - Word count: examples/wordcount.md
+      - Health check: examples/healthcheck.md
+      - ETL: examples/etl.md
+      - HTTP serve: examples/serve.md
+      - Schedule: examples/schedule.md
+      - Fleet: examples/fleet.md
+      - SQL plugin: examples/sql.md
+      - Stdlib dogfood: examples/stdlib.md
+      - Log analyzer: examples/log-analyzer.md
+      - Webhook router: examples/webhook-router.md
   - Reference:
       - Stdlib API: reference/stdlib.md
       - Environment variables: reference/env.md
@@ -86,7 +98,9 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg

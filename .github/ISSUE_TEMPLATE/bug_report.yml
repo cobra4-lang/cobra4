@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a parser / type-checker / runtime / CLI / LSP bug.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report. A minimal reproducer is the
+        single most useful thing you can include — without one, we'll
+        usually have to ask for it before doing anything.
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproducer
+      description: |
+        The shortest `.c4` (or shell) snippet that triggers the bug.
+      placeholder: |
+        # bug.c4
+        each x in [1, 2, 3] in parallel { f(x) }
+
+        # Run with:
+        # c4 run bug.c4
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: |
+        Should print `[2, 4, 6]`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Paste any traceback — the source map points back to `.c4`, copy that line.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: cobra4 version
+      description: "`c4 --version`"
+      placeholder: cobra4 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: "`python --version`"
+      placeholder: Python 3.13.7
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: Ubuntu 24.04 / macOS 14.5 / Windows 11
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Additional context
+      description: Anything else useful — IDE, plugins active, env vars set, …

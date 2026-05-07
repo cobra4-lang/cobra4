@@ -1,0 +1,55 @@
+name: Release VS Code extension
+
+on:
+  push:
+    tags: ["vscode-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to Marketplace + Open VSX
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editor/vscode/cobra4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Package
+        run: npx vsce package
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "${VSCE_PAT:-}" ]; then
+            echo "VSCE_PAT secret not set — skipping Marketplace publish"
+            exit 0
+          fi
+          npx vsce publish --pat "$VSCE_PAT"
+
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "${OVSX_PAT:-}" ]; then
+            echo "OVSX_PAT secret not set — skipping Open VSX publish"
+            exit 0
+          fi
+          npx ovsx publish --pat "$OVSX_PAT" *.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: editor/vscode/cobra4/*.vsix
+          retention-days: 30
