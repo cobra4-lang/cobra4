@@ -37,16 +37,23 @@ jobs:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/cobra4
-    permissions:
-      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
 
-      - name: Publish via OIDC trusted publisher
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "${TWINE_PASSWORD:-}" ]; then
+            echo "PYPI_API_TOKEN not set — skipping publish"
+            exit 0
+          fi
+          python -m pip install --upgrade twine
+          # `--skip-existing` so re-tagging the same version doesn't fail
+          # (PyPI rejects re-uploads of the same filename either way; this
+          # just exits 0 cleanly).
+          twine upload --skip-existing dist/*
