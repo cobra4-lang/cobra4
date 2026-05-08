@@ -10,7 +10,6 @@ often replaces a small Python program.*
 
 [![CI](https://github.com/cobra4-lang/cobra4/actions/workflows/ci.yml/badge.svg)](https://github.com/cobra4-lang/cobra4/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/cobra4.svg?label=PyPI)](https://pypi.org/project/cobra4/)
-[![Downloads](https://static.pepy.tech/badge/cobra4/month)](https://pepy.tech/project/cobra4)
 [![Open VSX](https://img.shields.io/open-vsx/v/cobra4-lang/cobra4?label=Open%20VSX)](https://open-vsx.org/extension/cobra4-lang/cobra4)
 [![Docs](https://img.shields.io/badge/docs-cobra4--lang.github.io-1f6feb)](https://cobra4-lang.github.io/cobra4/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
