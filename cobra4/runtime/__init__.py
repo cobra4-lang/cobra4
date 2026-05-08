@@ -31,6 +31,7 @@ from cobra4.runtime.deploy import (
 )
 from cobra4.runtime.schedule import queue, serve_forever, InMemoryQueue
 from cobra4.runtime.result import Result, Ok, Err, _c4_try_propagate, _C4Propagate
+from cobra4.runtime.workflow import Workflow, WorkflowError
 
 __all__ = [
     "SmartFn",
@@ -77,4 +78,6 @@ __all__ = [
     "Err",
     "_c4_try_propagate",
     "_C4Propagate",
+    "Workflow",
+    "WorkflowError",
 ]

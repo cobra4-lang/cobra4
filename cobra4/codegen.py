@@ -199,6 +199,10 @@ def _emit_stmt(em: _Emitter, s: N.Stmt) -> None:
         _emit_data_class(em, s, line)
     elif isinstance(s, N.DataSumDecl):
         _emit_data_sum(em, s, line)
+    elif isinstance(s, N.WorkflowDecl):
+        _emit_workflow(em, s, line)
+    elif isinstance(s, N.ResourceDecl):
+        _emit_resource(em, s, line)
     elif isinstance(s, N.Use):
         _emit_use(em, s, line)
     else:
@@ -428,6 +432,101 @@ def _emit_data_sum(em: _Emitter, s: N.DataSumDecl, line: int) -> None:
         for f in fields_sorted:
             _emit_data_field_line(em, f)
         em.indent_level -= 1
+
+
+_WORKFLOW_TASK_OPTS = {"retries", "timeout", "on_failure"}
+
+
+def _emit_workflow(em: _Emitter, s: N.WorkflowDecl, line: int) -> None:
+    em.write("import cobra4.runtime.workflow as _c4_wf_mod", line)
+    wf_var = f"__c4_wf_{s.name}"
+    em.write(f"{wf_var} = _c4_wf_mod.Workflow({s.name!r})", line)
+
+    declared: set[str] = set()
+    for t in s.tasks:
+        if not isinstance(t.call, N.Call):
+            em.write(
+                f"# task '{t.var}' must be `task <call>(...)` — got "
+                f"{type(t.call).__name__}",
+                t.loc.line if t.loc else line,
+            )
+            continue
+
+        # Split call args into "task options" (retries / timeout / ...)
+        # and "real call args" (everything else).
+        opts: dict[str, str] = {}
+        call_args: list[N.Arg] = []
+        for a in t.call.args:
+            if a.name in _WORKFLOW_TASK_OPTS and not a.star and not a.dstar:
+                opts[a.name] = _expr(a.value)
+            else:
+                call_args.append(a)
+
+        # Determine deps: any argument expression that references a
+        # previously declared task variable creates an edge.
+        deps: list[str] = []
+        for a in call_args:
+            for name in _expr_names(a.value):
+                if name in declared and name not in deps:
+                    deps.append(name)
+
+        # Build the lambda body:
+        #   - Replace each dep `Name(d)` with the lambda's arg of the same name.
+        #   - Render the call with original positional structure.
+        rebuilt_call = N.Call(func=t.call.func, args=call_args, loc=t.call.loc)
+        lambda_params = ", ".join(deps)
+        body_str = _expr(rebuilt_call)
+        wrapper = f"lambda {lambda_params}: {body_str}"
+
+        opts_kw = "".join(f", {k}={v}" for k, v in opts.items())
+        deps_tuple = "(" + "".join(f"{d!r}, " for d in deps) + ")"
+        em.write(
+            f"{wf_var}.add({t.var!r}, {wrapper}, deps={deps_tuple}{opts_kw})",
+            t.loc.line if t.loc else line,
+        )
+        declared.add(t.var)
+
+    # Run the workflow and bind every task name to its result so the
+    # rest of the module (after the block) can use them like normal vars.
+    em.write(f"{wf_var}__results = {wf_var}.run()", line)
+    for name in declared:
+        em.write(f"{name} = {wf_var}__results[{name!r}]", line)
+
+
+def _emit_resource(em: _Emitter, s: N.ResourceDecl, line: int) -> None:
+    em.write("import cobra4.runtime.infra as _c4_infra", line)
+    # Build a lambda that returns the fields dict — captures any outer
+    # references (including previously-declared resources) so deps wire
+    # up naturally.
+    body_parts = ", ".join(f"{k!r}: {_expr(v)}" for k, v in s.fields)
+    fields_fn = f"lambda: {{{body_parts}}}"
+    em.write(
+        f"{s.name} = _c4_infra.declare_resource("
+        f"{s.name!r}, {s.adapter_path!r}, {fields_fn})",
+        line,
+    )
+
+
+def _expr_names(e: Optional[N.Expr]) -> list[str]:
+    """Collect all bare ``Name`` references reachable from an expression.
+    Used by the workflow codegen to compute task dependencies."""
+    found: list[str] = []
+
+    def visit(node):
+        if isinstance(node, N.Name):
+            found.append(node.name)
+            return
+        for f in getattr(node, "__dataclass_fields__", {}):
+            v = getattr(node, f, None)
+            if hasattr(v, "__dataclass_fields__"):
+                visit(v)
+            elif isinstance(v, list):
+                for x in v:
+                    if hasattr(x, "__dataclass_fields__"):
+                        visit(x)
+
+    visit(e)
+    return found
 
 
 def _emit_data_field_line(em: _Emitter, f: N.DataField) -> None:

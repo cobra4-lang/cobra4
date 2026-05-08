@@ -464,6 +464,58 @@ def cmd_plugin(args: argparse.Namespace) -> int:
     return 64
 
 
+def cmd_infra(args: argparse.Namespace) -> int:
+    """Declarative infrastructure: import the file (collecting resource
+    declarations as a side effect), then run the requested phase
+    (``plan`` / ``apply`` / ``destroy``)."""
+    from cobra4.runtime import infra as infra_mod
+
+    infra_mod.clear_registry()
+    path = Path(args.file)
+    code, smap = _compile_file(path)
+    with tempfile.NamedTemporaryFile(
+        suffix=".py", prefix=f"{path.stem}__c4infra_", mode="w", encoding="utf-8", delete=False
+    ) as tmp:
+        tmp.write(code)
+        tmp_path = tmp.name
+    try:
+        proj_root = Path(__file__).resolve().parent.parent
+        if str(proj_root) not in sys.path:
+            sys.path.insert(0, str(proj_root))
+        runpy.run_path(tmp_path, run_name="__main__")
+    finally:
+        try:
+            Path(tmp_path).unlink()
+        except OSError:
+            pass
+
+    state_path = Path(args.state_file) if args.state_file else None
+    if args.action == "plan":
+        actions = infra_mod.plan(state_path)
+        if not actions:
+            print("(no resources declared)")
+            return 0
+        for name, action in actions:
+            line = f"  {action.kind.upper():>7}  {name:<24}  {action.notes}"
+            print(line)
+            for k, (old, new) in action.diff.items():
+                print(f"           {k}: {old!r} -> {new!r}")
+        return 0
+    if args.action == "apply":
+        new_state = infra_mod.apply(state_path)
+        print(f"applied {len(new_state)} resource(s):")
+        for name, st in new_state.items():
+            keys = ", ".join(f"{k}={v!r}" for k, v in st.items() if k != "contents")
+            print(f"  {name:<24}  {keys}")
+        return 0
+    if args.action == "destroy":
+        infra_mod.destroy(state_path)
+        print("destroyed all resources from state")
+        return 0
+    print(f"unknown infra action: {args.action}", file=sys.stderr)
+    return 2
+
+
 def cmd_test(args: argparse.Namespace) -> int:
     """Discover + run cobra4 tests.
 
@@ -627,6 +679,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Stop after N seconds (used for tests; default = run until Ctrl-C)",
     )
     p_serve.set_defaults(handler=cmd_serve)
+
+    p_infra = sub.add_parser("infra", help="Declarative infrastructure (resource declarations)")
+    p_infra.add_argument("action", choices=["plan", "apply", "destroy"])
+    p_infra.add_argument("file", help="cobra4 file containing `resource` blocks")
+    p_infra.add_argument("--state-file", default=None,
+                         help="Override state-file path (default: ./.cobra4/state.json)")
+    p_infra.set_defaults(handler=cmd_infra)
 
     p_plugin = sub.add_parser("plugin", help="Manage language plugins")
     p_plugin.add_argument("action", choices=["list", "add", "remove"], default="list", nargs="?")

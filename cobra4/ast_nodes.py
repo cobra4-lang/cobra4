@@ -444,6 +444,9 @@ class FnDecl(Stmt):
     block: Optional[list[Stmt]] = None  # `{ ... }` form
     decorators: list["Decorator"] = field(default_factory=list)
     is_async: bool = False              # `async fn name() { ... }`
+    # Declared effect set (`with [http, db]`). ``None`` = unannotated
+    # (any effect allowed). ``[]`` = explicitly pure.
+    effects: Optional[list[str]] = None
 
 
 @dataclass
@@ -500,6 +503,41 @@ class DataClassDecl(Stmt):
 class DataVariant(Node):
     name: str = ""
     fields: list[DataField] = field(default_factory=list)
+
+
+@dataclass
+class TaskAssign(Node):
+    """A single ``name = task call(...)`` line inside a workflow body."""
+
+    var: str = ""
+    call: Optional[Expr] = None  # the postfix_expr after `task`
+
+
+@dataclass
+class WorkflowDecl(Stmt):
+    """``workflow NAME { var1 = task f(); var2 = task g(var1) }``.
+
+    Each task's call expression may reference earlier task variables —
+    those become DAG dependencies. Special kwargs (``retries``,
+    ``timeout``, ``on_failure``) on the call are extracted at codegen
+    time and passed to the runtime ``Workflow.add(...)`` rather than to
+    the underlying user function.
+    """
+    name: str = ""
+    tasks: list[TaskAssign] = field(default_factory=list)
+
+
+@dataclass
+class ResourceDecl(Stmt):
+    """``resource NAME = adapter.path { field: expr ... }``.
+
+    Declarative infrastructure: not executed by ``c4 run`` (the call
+    just registers with the infra registry). Run with ``c4 infra
+    plan|apply|destroy``.
+    """
+    name: str = ""
+    adapter_path: str = ""        # dotted, e.g. "aws.s3" or "local.file"
+    fields: list[tuple[str, Expr]] = field(default_factory=list)
 
 
 @dataclass

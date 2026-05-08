@@ -15,6 +15,8 @@ start: (_NL | stmt)*
      | fn_decl
      | class_decl
      | data_decl
+     | workflow_decl
+     | resource_decl
      | use_stmt
 
 ?simple_stmt: assign_or_expr
@@ -97,10 +99,16 @@ use_stmt: "use" use_target ("as" NAME)?
 use_target: NAME ("." NAME)* -> use_dotted
           | STRING            -> use_string
 
-fn_decl: decorator* ASYNC_KW? "fn" NAME "(" params? ")" return_type? fn_body
+fn_decl: decorator* ASYNC_KW? "fn" NAME "(" params? ")" return_type? effect_clause? fn_body
 fn_body: block                           -> fn_block_body
        | "=" expr                        -> fn_expr_body
 ASYNC_KW: "async"
+
+// `with [http, db, log]` — declared capabilities the fn may invoke.
+// Empty list (`with []`) means pure: no effects at all.
+effect_clause: WITH_KW "[" effect_list? "]"
+WITH_KW: "with"
+effect_list: NAME ("," NAME)* ","?
 
 decorator: "@" dotted_name ("(" args? ")")? _NL*
 dotted_name: NAME ("." NAME)*
@@ -126,6 +134,21 @@ data_sum_decl:   "data" NAME "{" (_NL | data_variant)* "}"    -> data_sum_decl
 data_variant: NAME "(" data_fields? ")" _NL?                  -> data_variant
 data_fields: data_field ("," data_field)* ","?
 data_field: NAME (":" type)? ("=" expr)?                      -> data_field
+
+// `workflow NAME { var = task call(...) ... }` — DAG of tasks.
+// Body is restricted to `var = task <call>` lines for v1; control flow
+// inside a workflow comes later.
+workflow_decl: WORKFLOW_KW NAME "{" (_NL | task_assign)* "}"
+WORKFLOW_KW: "workflow"
+task_assign: NAME "=" TASK_KW postfix_expr
+TASK_KW: "task"
+
+// `resource NAME = adapter.path { field: expr ... }` — declarative
+// infrastructure. Adapters are looked up by dotted path at apply time.
+resource_decl: RESOURCE_KW NAME "=" resource_adapter "{" (_NL | resource_field)* "}"
+RESOURCE_KW: "resource"
+resource_adapter: NAME ("." NAME)*
+resource_field: NAME ":" expr
 
 // ---------- Patterns ----------
 

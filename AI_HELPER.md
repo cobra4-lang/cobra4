@@ -42,9 +42,10 @@ Keyword riservate (non usabili come nomi di variabile):
 if elif else while for each in not and or is True False None
 fn class data return raise break continue pass
 match case try catch finally
-use as where every on event from to parallel
+use as where every on event from to parallel with
 serve deploy lang
 async await
+workflow task resource
 ```
 
 ### 1.2 Commenti
@@ -413,6 +414,104 @@ match add_two("3", "abc") {
   l'`Err` propagato diventa il return value della fn.
 - Se applicato a qualcosa che non è `Ok` o `Err` → `TypeError` a
   runtime.
+
+### 3.14 Effetti / capability (`with [...]`)
+
+Una funzione può dichiarare quali effetti laterali può generare:
+
+```cobra4
+fn pure_double(x) -> int with [] = x * 2
+
+fn fetch_user(id) with [http] = http.get("https://api/{id}")
+
+fn pipeline(id) with [http, log] {
+    fetch_user(id)
+    log("done")
+}
+```
+
+**Effetti riconosciuti**: `http`, `fs`, `db`, `log`, `secret`, `ssh`,
+`time`, `deploy`. Built-in che hanno effetti dichiarati: `read`/`save`
+→ `[fs]`, `log` → `[log]`, `fetch` → `[http]`, `secret` → `[secret]`,
+`run` → `[ssh]`, `queue` → `[time]`, `deploy` → `[deploy]`.
+
+**Regole**:
+
+- `with []` = funzione pura.
+- `with [a, b]` = caller deve avere `[a, b]` (o superset).
+- Senza `with`, la funzione è "unannotated" e nessun controllo viene
+  fatto sulle sue chiamate. Adottabile gradualmente.
+- Violazione → warning `E001` da `c4 check`. Non blocca esecuzione
+  (per ora — runtime sandbox è in roadmap, vedi
+  [RFC 0001](docs/rfc/0001-effect-system.md)).
+
+### 3.15 Workflow / task DAG
+
+`workflow NAME { ... }` definisce una pipeline di task con dipendenze
+implicite e retry/timeout per task:
+
+```cobra4
+fn fetch() = read("./data.csv")
+fn clean(rows) = each r in rows where r["age"] >= 18 { r }
+fn enrich(rows) = each r in rows in parallel(workers=10) { add_geo(r) }
+
+workflow daily_etl {
+    raw       = task fetch(retries=3, timeout=60)
+    cleaned   = task clean(raw)
+    enriched  = task enrich(cleaned)
+    persisted = task save_to_disk(enriched, "./out.parquet")
+}
+
+# Dopo il blocco, ogni task var è disponibile come variabile normale
+log("done", n=len(enriched), path=persisted)
+```
+
+**Regole**:
+
+- Il body può contenere SOLO `var = task EXPR` (no control flow per ora).
+- Le dipendenze sono dedotte dai `Name` referenziati nei call args:
+  `task clean(raw)` → arc da `raw` a `cleaned`.
+- Modifier su `task ...` (kwargs `retries`, `timeout`, `on_failure`)
+  vengono estratti al codegen e passati al runner, non alla fn user.
+- Cycle detection / DAG topo-sort sono gestiti dal runner.
+- Vedi [RFC 0002](docs/rfc/0002-workflow-orchestration.md) per le
+  evoluzioni (distributed execution, conditional branches).
+
+### 3.16 Resources / IaC dichiarativo
+
+`resource NAME = adapter.path { field: expr ... }` dichiara
+infrastruttura. **Non eseguito da `c4 run`** — usa
+`c4 infra plan|apply|destroy FILE`:
+
+```cobra4
+resource manifest = local.file {
+    path: "./manifest.json"
+    contents: {"version": 1, "items": [1, 2, 3]}
+}
+
+resource derived = local.file {
+    path: "./derived.txt"
+    contents: "based on: {manifest.path}"
+}
+```
+
+```bash
+c4 infra plan ./infra.c4       # diff vs ./.cobra4/state.json
+c4 infra apply ./infra.c4      # esegue, salva stato
+c4 infra destroy ./infra.c4    # tear down, ordine inverso
+```
+
+**Adapter built-in**: `local.file` (write JSON/text/bytes). Aggiungerne
+di nuovi: `cobra4.runtime.infra.register_adapter("aws.s3", MyS3Adapter())`.
+Schema adapter: `plan(current, desired) -> Action`,
+`apply(current, desired) -> dict`, `destroy(current) -> None`.
+
+Cross-reference (`derived` legge `manifest.path`) funziona sia in plan
+che in apply — il runtime popola `r.state` con i desired prima di
+processare il next.
+
+Vedi [RFC 0003](docs/rfc/0003-infra-as-code.md) per la roadmap (più
+adapter, S3 state backend, drift detection).
 
 ### 3.13 Streaming
 

@@ -27,3 +27,6 @@ _etl_*.json
 
 # mkdocs build output
 site/
+
+# stdlib dogfood example output
+_stdlib_report.json

@@ -183,6 +183,12 @@ class Resolver:
             self.module_scope.define(s.name, s.loc)
             for v in s.variants:
                 self.module_scope.define(v.name, v.loc)
+        elif isinstance(s, N.WorkflowDecl):
+            # Each task var becomes a module-level binding after run().
+            for t in s.tasks:
+                self.module_scope.define(t.var, t.loc)
+        elif isinstance(s, N.ResourceDecl):
+            self.module_scope.define(s.name, s.loc)
         elif isinstance(s, N.Use):
             self.module_scope.define(s.alias or _last_segment(s.target), s.loc)
         elif isinstance(s, N.Assign):
@@ -306,6 +312,21 @@ class Resolver:
                 for f in v.fields:
                     if f.default is not None:
                         self._visit_expr(f.default)
+        elif isinstance(s, N.WorkflowDecl):
+            # Walk task call expressions inside a fresh scope where each
+            # earlier task var is already defined — that way a Name
+            # reference to a previous task doesn't get flagged as
+            # undefined.
+            self._enter("workflow")
+            for t in s.tasks:
+                self._define(t.var, t.loc)
+                if t.call is not None:
+                    self._visit_expr(t.call)
+            self._leave()
+        elif isinstance(s, N.ResourceDecl):
+            self._define(s.name, s.loc)
+            for _, expr in s.fields:
+                self._visit_expr(expr)
         elif isinstance(s, N.ClassDecl):
             self._define(s.name, s.loc)
             self._enter("class")

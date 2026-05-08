@@ -121,6 +121,28 @@ def _join(a: C4Type, b: C4Type) -> C4Type:
 class _FnSig:
     params: list[tuple[str, C4Type]] = field(default_factory=list)
     return_type: C4Type = ANY_T
+    # Declared effect set. ``None`` = unannotated. ``frozenset()`` = pure.
+    effects: Optional[frozenset[str]] = None
+
+
+_BUILTIN_EFFECTS: dict[str, frozenset[str]] = {
+    # http
+    "fetch": frozenset({"http"}),
+    "http": frozenset({"http"}),
+    # filesystem
+    "read":  frozenset({"fs"}),
+    "save":  frozenset({"fs"}),
+    # observability
+    "log":   frozenset({"log"}),
+    # secrets
+    "secret": frozenset({"secret"}),
+    # remote command
+    "run":   frozenset({"ssh"}),
+    # scheduling / events / time
+    "queue":  frozenset({"time"}),
+    # deploy
+    "deploy": frozenset({"deploy"}),
+}
 
 
 class TypeChecker:
@@ -147,7 +169,10 @@ class TypeChecker:
             for p in s.params:
                 params.append((p.name, _type_ref_to_t(p.type_ref)))
             ret = _type_ref_to_t(s.return_type)
-            self.fn_sigs[s.name] = _FnSig(params=params, return_type=ret)
+            effects = frozenset(s.effects) if s.effects is not None else None
+            self.fn_sigs[s.name] = _FnSig(
+                params=params, return_type=ret, effects=effects,
+            )
 
     # ---------- helpers ----------
 
@@ -157,6 +182,50 @@ class TypeChecker:
     def _record_var(self, name: str, t: C4Type) -> None:
         if t.name != "Any":
             self.var_types[name] = t
+
+    # ---------- effect collection ----------
+
+    def _calls_in_fn(self, fn: N.FnDecl):
+        """Yield ``(callee_name, effects, loc)`` for every Call in the
+        function body where the callee resolves to a known function or
+        a known built-in with declared effects.
+
+        Unknown / unannotated callees are skipped — this is a gradual
+        check: warn only on calls we can attribute effects to.
+        """
+        out: list[tuple[str, frozenset[str], Optional[N.Loc]]] = []
+
+        def visit(node):
+            if node is None:
+                return
+            if isinstance(node, N.Call) and isinstance(node.func, N.Name):
+                name = node.func.name
+                effects: Optional[frozenset[str]] = None
+                if name in self.fn_sigs and self.fn_sigs[name].effects is not None:
+                    effects = self.fn_sigs[name].effects
+                elif name in _BUILTIN_EFFECTS:
+                    effects = _BUILTIN_EFFECTS[name]
+                if effects:  # skip empty (pure) — those add no constraint
+                    out.append((name, effects, node.loc))
+            for f in getattr(node, "__dataclass_fields__", {}):
+                v = getattr(node, f, None)
+                if hasattr(v, "__dataclass_fields__"):
+                    visit(v)
+                elif isinstance(v, list):
+                    for x in v:
+                        if hasattr(x, "__dataclass_fields__"):
+                            visit(x)
+                        elif isinstance(x, tuple):
+                            for y in x:
+                                if hasattr(y, "__dataclass_fields__"):
+                                    visit(y)
+
+        if fn.block is not None:
+            for s in fn.block:
+                visit(s)
+        if fn.body is not None:
+            visit(fn.body)
+        return out
 
     # ---------- flow narrowing ----------
 
@@ -349,6 +418,24 @@ class TypeChecker:
                     )
             if s.block is not None:
                 self._visit_stmts(s.block)
+
+            # Effect check: if this fn declared `with [...]`, every call
+            # in its body must invoke an fn whose declared effects are
+            # ⊆ this fn's. Unannotated callees skip the check (M-level
+            # gradual: pure annotations are opt-in).
+            if s.effects is not None:
+                declared = frozenset(s.effects)
+                for call_name, call_effects, call_loc in self._calls_in_fn(s):
+                    missing = call_effects - declared
+                    if missing:
+                        self._warn(
+                            f"function '{s.name}' declares effects {sorted(declared)} "
+                            f"but calls '{call_name}' which requires "
+                            f"{sorted(call_effects)} (missing: {sorted(missing)})",
+                            call_loc,
+                            "E001",
+                        )
+
             self.var_types = saved
         elif isinstance(s, N.ClassDecl):
             self._visit_stmts(s.body)

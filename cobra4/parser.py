@@ -321,12 +321,16 @@ class _Transformer(Transformer):
         return_type: Optional[N.TypeRef] = None
         body: Optional[N.Expr] = None
         block: Optional[list[N.Stmt]] = None
-        # The remaining children: optional params (list), optional return_type, fn_body
+        effects: Optional[list[str]] = None
+        # The remaining children: optional params (list), optional return_type,
+        # optional effect_clause, fn_body
         for c in children[idx:-1]:
             if isinstance(c, list) and (not c or isinstance(c[0], N.Param)):
                 params = c
             elif isinstance(c, N.TypeRef):
                 return_type = c
+            elif isinstance(c, _EffectClause):
+                effects = c.effects
         fn_body = children[-1]
         if isinstance(fn_body, _FnBodyBlock):
             block = fn_body.statements
@@ -340,8 +344,20 @@ class _Transformer(Transformer):
             block=block,
             decorators=decorators,
             is_async=is_async,
+            effects=effects,
             loc=_loc(meta),
         )
+
+    def effect_clause(self, meta, children):
+        # children: [WITH_KW token, effect_list?]
+        eff_list: list[str] = []
+        for c in children:
+            if isinstance(c, list):
+                eff_list = c
+        return _EffectClause(effects=eff_list)
+
+    def effect_list(self, meta, children):
+        return [str(c) for c in children]
 
     def fn_block_body(self, meta, children):
         return _FnBodyBlock(statements=children[0].statements)
@@ -447,6 +463,49 @@ class _Transformer(Transformer):
         name = str(children[0])
         variants: list[N.DataVariant] = [c for c in children[1:] if isinstance(c, N.DataVariant)]
         return N.DataSumDecl(name=name, variants=variants, loc=_loc(meta))
+
+    # ---------- workflow ----------
+
+    def workflow_decl(self, meta, children):
+        # children: [WORKFLOW_KW token, NAME, *task_assigns]
+        name = str(children[1])
+        tasks: list[N.TaskAssign] = [c for c in children[2:] if isinstance(c, N.TaskAssign)]
+        return N.WorkflowDecl(name=name, tasks=tasks, loc=_loc(meta))
+
+    def task_assign(self, meta, children):
+        # children: [NAME, TASK_KW, postfix_expr]
+        # The TASK_KW token may or may not appear in the children list
+        # depending on whether Lark filtered it. Find the call expr.
+        var = str(children[0])
+        call: Optional[N.Expr] = None
+        for c in children[1:]:
+            if isinstance(c, N.Expr):
+                call = c
+                break
+        return N.TaskAssign(var=var, call=call, loc=_loc(meta))
+
+    # ---------- resource (IaC) ----------
+
+    def resource_decl(self, meta, children):
+        # children: [RESOURCE_KW, NAME, _ResourceAdapter, *resource_fields]
+        name = str(children[1])
+        adapter_path = ""
+        fields_list: list[tuple[str, N.Expr]] = []
+        for c in children[2:]:
+            if isinstance(c, _ResourceAdapter):
+                adapter_path = c.path
+            elif isinstance(c, _ResourceField):
+                fields_list.append((c.name, c.value))
+        return N.ResourceDecl(
+            name=name, adapter_path=adapter_path,
+            fields=fields_list, loc=_loc(meta),
+        )
+
+    def resource_adapter(self, meta, children):
+        return _ResourceAdapter(path=".".join(str(c) for c in children))
+
+    def resource_field(self, meta, children):
+        return _ResourceField(name=str(children[0]), value=children[1])
 
     # ---------- Patterns ----------
 
@@ -799,6 +858,22 @@ class _Block:
 @dataclass
 class _Parallel:
     args: list[N.Arg]
+
+
+@dataclass
+class _EffectClause:
+    effects: list[str]
+
+
+@dataclass
+class _ResourceAdapter:
+    path: str
+
+
+@dataclass
+class _ResourceField:
+    name: str
+    value: N.Expr
 
 
 @dataclass
