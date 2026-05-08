@@ -77,6 +77,10 @@ nav:
       - Stdlib API: reference/stdlib.md
       - Environment variables: reference/env.md
       - AI assistants guide: reference/ai-helper.md
+  - RFCs:
+      - "0001 — Effect / capability system": rfc/0001-effect-system.md
+      - "0002 — Workflow orchestration": rfc/0002-workflow-orchestration.md
+      - "0003 — Infra-as-code": rfc/0003-infra-as-code.md
 
 markdown_extensions:
   - admonition

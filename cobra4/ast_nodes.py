@@ -154,6 +154,26 @@ class SafeAttr(Expr):
 
 
 @dataclass
+class Await(Expr):
+    """``await EXPR`` — only legal inside an ``async fn``."""
+
+    target: Optional[Expr] = None
+
+
+@dataclass
+class TryPropagate(Expr):
+    """``expr?`` — postfix Result propagation operator.
+
+    If the expression evaluates to ``Ok(v)``, the whole expression
+    evaluates to ``v``. If it evaluates to ``Err(e)``, the enclosing
+    function early-returns with that ``Err``. See
+    :mod:`cobra4.runtime.result` for the runtime contract.
+    """
+
+    target: Optional[Expr] = None
+
+
+@dataclass
 class Index(Expr):
     target: Optional[Expr] = None
     key: Optional[Expr] = None
@@ -423,6 +443,7 @@ class FnDecl(Stmt):
     body: Optional[Expr] = None         # `=` form
     block: Optional[list[Stmt]] = None  # `{ ... }` form
     decorators: list["Decorator"] = field(default_factory=list)
+    is_async: bool = False              # `async fn name() { ... }`
 
 
 @dataclass
@@ -453,3 +474,41 @@ class ClassDecl(Stmt):
     name: str = ""
     supers: list[TypeRef] = field(default_factory=list)
     body: list[Stmt] = field(default_factory=list)
+
+
+# ---------- Data classes & sum types ----------
+
+
+@dataclass
+class DataField(Node):
+    name: str = ""
+    type_ref: Optional[TypeRef] = None
+    default: Optional[Expr] = None
+
+
+@dataclass
+class DataClassDecl(Stmt):
+    """``data class Point(x: int, y: int = 0)``.
+
+    Codegen produces a stdlib ``@dataclass`` with the listed fields.
+    """
+    name: str = ""
+    fields: list[DataField] = field(default_factory=list)
+
+
+@dataclass
+class DataVariant(Node):
+    name: str = ""
+    fields: list[DataField] = field(default_factory=list)
+
+
+@dataclass
+class DataSumDecl(Stmt):
+    """``data Event { OrderPlaced(id: str) ... }``.
+
+    Sum type — base ``Event`` is empty, each variant is a dataclass
+    subclass. Pattern matching (``match e { case OrderPlaced(id) ... }``)
+    binds positional fields by declaration order.
+    """
+    name: str = ""
+    variants: list[DataVariant] = field(default_factory=list)

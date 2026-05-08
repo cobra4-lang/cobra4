@@ -80,6 +80,8 @@ _C4_BUILTINS: frozenset[str] = frozenset(
         "aws", "gcp", "azure", "k8s", "fly",
         # M4 daemon
         "serve_forever",
+        # Result types
+        "Result", "Ok", "Err",
     }
 )
 
@@ -175,6 +177,12 @@ class Resolver:
             self.module_scope.define(s.name, s.loc)
         elif isinstance(s, N.ClassDecl):
             self.module_scope.define(s.name, s.loc)
+        elif isinstance(s, N.DataClassDecl):
+            self.module_scope.define(s.name, s.loc)
+        elif isinstance(s, N.DataSumDecl):
+            self.module_scope.define(s.name, s.loc)
+            for v in s.variants:
+                self.module_scope.define(v.name, v.loc)
         elif isinstance(s, N.Use):
             self.module_scope.define(s.alias or _last_segment(s.target), s.loc)
         elif isinstance(s, N.Assign):
@@ -286,6 +294,18 @@ class Resolver:
             if s.block is not None:
                 self._visit_stmts(s.block)
             self._leave()
+        elif isinstance(s, N.DataClassDecl):
+            self._define(s.name, s.loc)
+            for f in s.fields:
+                if f.default is not None:
+                    self._visit_expr(f.default)
+        elif isinstance(s, N.DataSumDecl):
+            self._define(s.name, s.loc)
+            for v in s.variants:
+                self._define(v.name, v.loc)
+                for f in v.fields:
+                    if f.default is not None:
+                        self._visit_expr(f.default)
         elif isinstance(s, N.ClassDecl):
             self._define(s.name, s.loc)
             self._enter("class")

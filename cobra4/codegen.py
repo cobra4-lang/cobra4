@@ -45,9 +45,31 @@ _RUNTIME_IMPORT = (
     "    env_from,\n"
     "    aws, gcp, azure, k8s, fly,\n"
     "    queue, serve_forever,\n"
+    "    Result, Ok, Err,\n"
+    "    _c4_try_propagate, _C4Propagate,\n"
     ")\n"
     "from cobra4.runtime.core import serve_handler as _c4_serve\n"
+    "from cobra4.runtime.concurrency import async_parallel_for as _c4_async_parallel_for\n"
 )
+
+
+# Tracks whether we're currently inside an `async fn` body. Affects how
+# `each ... in parallel` is emitted (sync fan-out vs `await asyncio.gather`).
+_ASYNC_DEPTH = 0
+
+
+def _in_async() -> bool:
+    return _ASYNC_DEPTH > 0
+
+
+def _enter_async() -> None:
+    global _ASYNC_DEPTH
+    _ASYNC_DEPTH += 1
+
+
+def _leave_async() -> None:
+    global _ASYNC_DEPTH
+    _ASYNC_DEPTH -= 1
 
 
 @dataclass
@@ -173,6 +195,10 @@ def _emit_stmt(em: _Emitter, s: N.Stmt) -> None:
         _emit_fn_decl(em, s, line)
     elif isinstance(s, N.ClassDecl):
         _emit_class(em, s, line)
+    elif isinstance(s, N.DataClassDecl):
+        _emit_data_class(em, s, line)
+    elif isinstance(s, N.DataSumDecl):
+        _emit_data_sum(em, s, line)
     elif isinstance(s, N.Use):
         _emit_use(em, s, line)
     else:
@@ -199,7 +225,10 @@ def _emit_each_stmt(em: _Emitter, s: N.Each, line: int) -> None:
             iterable = f"[{s.var} for {s.var} in {_expr(s.iterable)} if {_expr(s.where)}]"
         else:
             iterable = _expr(s.iterable)
-        em.write(f"_c4_parallel_for({iterable}, {body_fn}{opts})", line)
+        if _in_async():
+            em.write(f"await _c4_async_parallel_for({iterable}, {body_fn}{opts})", line)
+        else:
+            em.write(f"_c4_parallel_for({iterable}, {body_fn}{opts})", line)
     else:
         em.write(f"for {s.var} in {_expr(s.iterable)}:", line)
         if s.where is not None:
@@ -238,17 +267,111 @@ def _emit_fn_decl(em: _Emitter, s: N.FnDecl, line: int) -> None:
     ret = ""
     if s.return_type is not None:
         ret = f" -> {_type(s.return_type)}"
-    em.write(f"def {s.name}({params}){ret}:", line)
+    kw = "async def" if s.is_async else "def"
+    em.write(f"{kw} {s.name}({params}){ret}:", line)
+
+    if s.is_async:
+        _enter_async()
+    try:
+        _emit_fn_decl_body(em, s, line)
+    finally:
+        if s.is_async:
+            _leave_async()
+
+
+def _emit_fn_decl_body(em: _Emitter, s: N.FnDecl, line: int) -> None:
+    # If the body uses postfix `?`, wrap in try/except so an early
+    # `Err` propagation surfaces as the function's return value.
+    needs_propagate_wrap = _contains_try_propagate(s.block) or (
+        s.body is not None and _expr_contains_try_propagate(s.body)
+    )
+
     if s.block is not None:
-        _emit_block(em, s.block)
+        if needs_propagate_wrap:
+            em.indent_level += 1
+            em.write("try:")
+            em.indent_level += 1
+            for inner in s.block:
+                _emit_stmt(em, inner)
+            em.indent_level -= 1
+            em.write("except _C4Propagate as __c4_p:")
+            em.indent_level += 1
+            em.write("return __c4_p.err")
+            em.indent_level -= 1
+            em.indent_level -= 1
+        else:
+            _emit_block(em, s.block)
     elif s.body is not None:
         em.indent_level += 1
-        em.write(f"return {_expr(s.body)}")
+        if needs_propagate_wrap:
+            em.write("try:")
+            em.indent_level += 1
+            em.write(f"return {_expr(s.body)}")
+            em.indent_level -= 1
+            em.write("except _C4Propagate as __c4_p:")
+            em.indent_level += 1
+            em.write("return __c4_p.err")
+            em.indent_level -= 1
+        else:
+            em.write(f"return {_expr(s.body)}")
         em.indent_level -= 1
     else:
         em.indent_level += 1
         em.write("pass")
         em.indent_level -= 1
+
+
+def _expr_contains_try_propagate(e: Optional[N.Expr]) -> bool:
+    if e is None:
+        return False
+    if isinstance(e, N.TryPropagate):
+        return True
+    for f in getattr(e, "__dataclass_fields__", {}):
+        v = getattr(e, f, None)
+        if isinstance(v, N.Expr):
+            if _expr_contains_try_propagate(v):
+                return True
+        elif isinstance(v, list):
+            for x in v:
+                if isinstance(x, N.Expr) and _expr_contains_try_propagate(x):
+                    return True
+                elif isinstance(x, N.Stmt) and _stmt_contains_try_propagate(x):
+                    return True
+                elif isinstance(x, tuple):
+                    for y in x:
+                        if isinstance(y, N.Expr) and _expr_contains_try_propagate(y):
+                            return True
+    return False
+
+
+def _stmt_contains_try_propagate(s: Optional[N.Stmt]) -> bool:
+    if s is None:
+        return False
+    for f in getattr(s, "__dataclass_fields__", {}):
+        v = getattr(s, f, None)
+        if isinstance(v, N.Expr):
+            if _expr_contains_try_propagate(v):
+                return True
+        elif isinstance(v, list):
+            for x in v:
+                if isinstance(x, N.Stmt) and _stmt_contains_try_propagate(x):
+                    return True
+                elif isinstance(x, N.Expr) and _expr_contains_try_propagate(x):
+                    return True
+                elif isinstance(x, tuple):
+                    for y in x:
+                        if isinstance(y, N.Expr) and _expr_contains_try_propagate(y):
+                            return True
+                        elif isinstance(y, list):
+                            if _contains_try_propagate(y):
+                                return True
+    return False
+
+
+def _contains_try_propagate(stmts: Optional[list]) -> bool:
+    if stmts is None:
+        return False
+    return any(_stmt_contains_try_propagate(s) for s in stmts)
 
 
 def _emit_class(em: _Emitter, s: N.ClassDecl, line: int) -> None:
@@ -265,6 +388,54 @@ def _emit_class(em: _Emitter, s: N.ClassDecl, line: int) -> None:
     for item in s.body:
         _emit_stmt(em, item)
     em.indent_level -= 1
+
+
+def _emit_data_class(em: _Emitter, s: N.DataClassDecl, line: int) -> None:
+    em.write("import dataclasses as _c4_dc", line)
+    em.write("@_c4_dc.dataclass", line)
+    em.write(f"class {s.name}:", line)
+    if not s.fields:
+        em.indent_level += 1
+        em.write("pass")
+        em.indent_level -= 1
+        return
+    em.indent_level += 1
+    # Required (no default) must come before defaulted in @dataclass.
+    fields_sorted = sorted(s.fields, key=lambda f: f.default is not None)
+    for f in fields_sorted:
+        _emit_data_field_line(em, f)
+    em.indent_level -= 1
+
+
+def _emit_data_sum(em: _Emitter, s: N.DataSumDecl, line: int) -> None:
+    em.write("import dataclasses as _c4_dc", line)
+    # Base class — empty, marker for the sum type.
+    em.write(f"class {s.name}:", line)
+    em.indent_level += 1
+    em.write("pass")
+    em.indent_level -= 1
+    # Each variant is a dataclass subclass of the base.
+    for v in s.variants:
+        em.write("@_c4_dc.dataclass", line)
+        em.write(f"class {v.name}({s.name}):", line)
+        if not v.fields:
+            em.indent_level += 1
+            em.write("pass")
+            em.indent_level -= 1
+            continue
+        em.indent_level += 1
+        fields_sorted = sorted(v.fields, key=lambda f: f.default is not None)
+        for f in fields_sorted:
+            _emit_data_field_line(em, f)
+        em.indent_level -= 1
+
+
+def _emit_data_field_line(em: _Emitter, f: N.DataField) -> None:
+    ann = _type(f.type_ref) if f.type_ref else "object"
+    if f.default is not None:
+        em.write(f"{f.name}: {ann} = {_expr(f.default)}")
+    else:
+        em.write(f"{f.name}: {ann}")
 
 
 def _emit_use(em: _Emitter, s: N.Use, line: int) -> None:
@@ -349,6 +520,10 @@ def _expr(e: Optional[N.Expr]) -> str:
         return f"{_expr(e.target)}.{e.name}"
     if isinstance(e, N.SafeAttr):
         return f"_c4_safe_attr({_expr(e.target)}, {e.name!r})"
+    if isinstance(e, N.TryPropagate):
+        return f"_c4_try_propagate({_expr(e.target)})"
+    if isinstance(e, N.Await):
+        return f"(await {_expr(e.target)})"
     if isinstance(e, N.Index):
         return f"{_expr(e.target)}[{_subscript(e.key)}]"
     if isinstance(e, N.Call):
@@ -470,6 +645,8 @@ def _each_expr_to_str(e: N.EachExpr) -> str:
             iterable = f"[{e.var} for {e.var} in {_expr(e.iterable)}{where_clause}]"
         else:
             iterable = _expr(e.iterable)
+        if _in_async():
+            return f"(await _c4_async_parallel_for({iterable}, {body_fn}{opts}))"
         return f"_c4_parallel_for({iterable}, {body_fn}{opts})"
     # sequential each as expression: build list-comprehension when body is a
     # single expression; else a helper.
@@ -495,14 +672,19 @@ def _block_to_lambda(body: list[N.Stmt], params: Optional[list[str]] = None) -> 
       - single ``ExprStmt`` (returns the expression's value)
     Otherwise falls back to ``(lambda ...: _c4_run_stmts(...))`` which is
     not actually wired — the cases above cover all examples in M1.
+
+    Special case: inside an ``async fn``, Python lambdas cannot contain
+    ``await``. If the user wrote ``each ... in parallel { await coro }``
+    we strip the redundant ``await`` — ``_c4_async_parallel_for`` awaits
+    the returned coroutine itself.
     """
     p = ", ".join(params or [])
     if not body:
         return f"(lambda {p}: None)"
     if len(body) == 1 and isinstance(body[0], N.ExprStmt):
-        return f"(lambda {p}: {_expr(body[0].value)})"
+        return f"(lambda {p}: {_expr(_strip_await_in_async(body[0].value))})"
     if len(body) == 1 and isinstance(body[0], N.Return):
-        return f"(lambda {p}: {_expr(body[0].value)})"
+        return f"(lambda {p}: {_expr(_strip_await_in_async(body[0].value))})"
     # Fallback: a tuple of expressions (sequential). Best effort.
     exprs = []
     for st in body:
@@ -513,6 +695,16 @@ def _block_to_lambda(body: list[N.Stmt], params: Optional[list[str]] = None) -> 
         else:
             exprs.append("None")
     return f"(lambda {p}: ({', '.join(exprs)})[-1])"
+
+
+def _strip_await_in_async(e: Optional[N.Expr]) -> Optional[N.Expr]:
+    """If ``e`` is ``Await(inner)`` and we're inside an async fn, return
+    ``inner`` — the redundant ``await`` would put a ``await`` keyword
+    inside a sync ``lambda`` (a SyntaxError) and the calling helper
+    (`_c4_async_parallel_for`) awaits the coroutine itself."""
+    if _in_async() and isinstance(e, N.Await):
+        return e.target
+    return e
 
 
 def _pattern(p: Optional[N.Pattern]) -> str:

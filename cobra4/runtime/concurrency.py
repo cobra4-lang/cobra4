@@ -48,3 +48,50 @@ def parallel_for(
     with Executor(max_workers=workers) as ex:
         futures = [ex.submit(fn, x) for x in items_list]
         return [f.result(timeout=timeout) for f in futures]
+
+
+async def async_parallel_for(
+    items: Iterable[Any],
+    fn: Callable[[Any], Any],
+    *,
+    workers: int | None = None,
+    mode: str | None = None,  # accepted for surface-level parity, ignored
+    timeout: float | None = None,
+) -> list[Any]:
+    """Async counterpart of :func:`parallel_for` — used by codegen when
+    ``each ... in parallel { ... }`` appears inside an ``async fn``.
+
+    ``fn`` is awaited if it returns a coroutine; otherwise its return is
+    used as-is. ``workers`` becomes the size of an ``asyncio.Semaphore``
+    that bounds concurrency; ``None`` means unbounded.
+
+    Order of results matches order of input.
+    """
+    import asyncio
+    import inspect
+
+    items_list = list(items)
+    if not items_list:
+        return []
+
+    if workers is not None and workers < 1:
+        workers = 1
+    sem = asyncio.Semaphore(workers) if workers else None
+
+    async def _run(item: Any) -> Any:
+        if sem is not None:
+            async with sem:
+                return await _maybe_await(fn(item))
+        return await _maybe_await(fn(item))
+
+    async def _maybe_await(v: Any) -> Any:
+        if inspect.isawaitable(v):
+            return await v
+        return v
+
+    if timeout is not None:
+        return await asyncio.wait_for(
+            asyncio.gather(*[_run(x) for x in items_list]),
+            timeout=timeout,
+        )
+    return await asyncio.gather(*[_run(x) for x in items_list])

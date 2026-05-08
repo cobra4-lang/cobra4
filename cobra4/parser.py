@@ -307,6 +307,15 @@ class _Transformer(Transformer):
         while idx < len(children) and isinstance(children[idx], N.Decorator):
             decorators.append(children[idx])
             idx += 1
+        # Optional `async` token before the function NAME.
+        is_async = False
+        if (
+            idx < len(children)
+            and hasattr(children[idx], "type")
+            and children[idx].type == "ASYNC_KW"
+        ):
+            is_async = True
+            idx += 1
         name_tok = children[idx]; idx += 1
         params: list[N.Param] = []
         return_type: Optional[N.TypeRef] = None
@@ -330,6 +339,7 @@ class _Transformer(Transformer):
             body=body,
             block=block,
             decorators=decorators,
+            is_async=is_async,
             loc=_loc(meta),
         )
 
@@ -400,6 +410,43 @@ class _Transformer(Transformer):
 
     def class_body_item(self, meta, children):
         return children[0]
+
+    # ---------- data class / data sum ----------
+
+    def data_field(self, meta, children):
+        name = str(children[0])
+        tref: Optional[N.TypeRef] = None
+        default: Optional[N.Expr] = None
+        for c in children[1:]:
+            if isinstance(c, N.TypeRef):
+                tref = c
+            elif isinstance(c, N.Expr):
+                default = c
+        return N.DataField(name=name, type_ref=tref, default=default, loc=_loc(meta))
+
+    def data_fields(self, meta, children):
+        return list(children)
+
+    def data_class_decl(self, meta, children):
+        name = str(children[0])
+        fields: list[N.DataField] = []
+        for c in children[1:]:
+            if isinstance(c, list):
+                fields = c
+        return N.DataClassDecl(name=name, fields=fields, loc=_loc(meta))
+
+    def data_variant(self, meta, children):
+        name = str(children[0])
+        fields: list[N.DataField] = []
+        for c in children[1:]:
+            if isinstance(c, list):
+                fields = c
+        return N.DataVariant(name=name, fields=fields, loc=_loc(meta))
+
+    def data_sum_decl(self, meta, children):
+        name = str(children[0])
+        variants: list[N.DataVariant] = [c for c in children[1:] if isinstance(c, N.DataVariant)]
+        return N.DataSumDecl(name=name, variants=variants, loc=_loc(meta))
 
     # ---------- Patterns ----------
 
@@ -602,6 +649,12 @@ class _Transformer(Transformer):
         target = children[0]
         name = str(children[1])
         return N.SafeAttr(target=target, name=name, loc=_loc(meta))
+
+    def try_propagate_expr(self, meta, children):
+        return N.TryPropagate(target=children[0], loc=_loc(meta))
+
+    def await_expr(self, meta, children):
+        return N.Await(target=children[0], loc=_loc(meta))
 
     def args(self, meta, children):
         return list(children)

@@ -14,6 +14,7 @@ start: (_NL | stmt)*
      | compound_stmt
      | fn_decl
      | class_decl
+     | data_decl
      | use_stmt
 
 ?simple_stmt: assign_or_expr
@@ -96,9 +97,10 @@ use_stmt: "use" use_target ("as" NAME)?
 use_target: NAME ("." NAME)* -> use_dotted
           | STRING            -> use_string
 
-fn_decl: decorator* "fn" NAME "(" params? ")" return_type? fn_body
+fn_decl: decorator* ASYNC_KW? "fn" NAME "(" params? ")" return_type? fn_body
 fn_body: block                           -> fn_block_body
        | "=" expr                        -> fn_expr_body
+ASYNC_KW: "async"
 
 decorator: "@" dotted_name ("(" args? ")")? _NL*
 dotted_name: NAME ("." NAME)*
@@ -114,6 +116,16 @@ type: NAME ("[" type ("," type)* "]")?
 class_decl: "class" NAME class_super? "{" (_NL | class_body_item)* "}"
 class_super: "(" type ("," type)* ")"
 class_body_item: fn_decl | assign_or_expr | pass_stmt
+
+// `data class Foo(name: str, age: int = 0)` — concise dataclass.
+// `data Event { Variant1(...) Variant2(...) }` — sum / tagged-union type.
+?data_decl: data_class_decl
+          | data_sum_decl
+data_class_decl: "data" "class" NAME "(" data_fields? ")"     -> data_class_decl
+data_sum_decl:   "data" NAME "{" (_NL | data_variant)* "}"    -> data_sum_decl
+data_variant: NAME "(" data_fields? ")" _NL?                  -> data_variant
+data_fields: data_field ("," data_field)* ","?
+data_field: NAME (":" type)? ("=" expr)?                      -> data_field
 
 // ---------- Patterns ----------
 
@@ -201,6 +213,7 @@ MULDIV_OP: "*" | "/" | "//" | "%"
 POWER.3: "**"
 ?unary: ADDSUB_OP unary    -> addsub_unary
       | "~" unary          -> invert
+      | "await" unary      -> await_expr
       | postfix_expr
 
 ?postfix_expr: atom
@@ -208,6 +221,7 @@ POWER.3: "**"
              | postfix_expr "[" subscript "]"      -> index_expr
              | postfix_expr "." NAME               -> attr_expr
              | postfix_expr "?." NAME              -> safe_attr_expr
+             | postfix_expr "?"                    -> try_propagate_expr
 
 // `xs[i]` is an index; `xs[a:b]` / `xs[:b]` / `xs[a:]` / `xs[:]` /
 // `xs[a:b:c]` are slices. Step-only forms with empty start/end (e.g.

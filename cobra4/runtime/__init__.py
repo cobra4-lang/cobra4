@@ -30,6 +30,7 @@ from cobra4.runtime.deploy import (
     fly,
 )
 from cobra4.runtime.schedule import queue, serve_forever, InMemoryQueue
+from cobra4.runtime.result import Result, Ok, Err, _c4_try_propagate, _C4Propagate
 
 __all__ = [
     "SmartFn",
@@ -71,4 +72,9 @@ __all__ = [
     "queue",
     "serve_forever",
     "InMemoryQueue",
+    "Result",
+    "Ok",
+    "Err",
+    "_c4_try_propagate",
+    "_C4Propagate",
 ]

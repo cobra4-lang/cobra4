@@ -42,8 +42,9 @@ Keyword riservate (non usabili come nomi di variabile):
 if elif else while for each in not and or is True False None
 fn class data return raise break continue pass
 match case try catch finally
-use as where every on event from to with parallel
+use as where every on event from to parallel
 serve deploy lang
+async await
 ```
 
 ### 1.2 Commenti
@@ -342,6 +343,99 @@ use github.com/user/lib@1.2          # — NON ANCORA: c4 deps è M7
 
 ---
 
+### 3.11 Async / await
+
+```cobra4
+use asyncio
+
+async fn fetch(url) {
+    await asyncio.sleep(0.01)
+    return "data: {url}"
+}
+
+async fn main() {
+    a = await fetch("a")
+    b = await fetch("b")
+
+    # `each ... in parallel` dentro un async fn usa asyncio.gather
+    # con un semaphore di workers, non un thread pool.
+    results = each u in ["x", "y", "z"] in parallel(workers=10) {
+        await fetch(u)
+    }
+    log("done", n=len(results))
+}
+
+asyncio.run(main())
+```
+
+**Regole**:
+
+- `async fn` produce una coroutine Python.
+- `await EXPR` legale solo dentro `async fn`.
+- Dentro `each ... in parallel { await coro(x) }` async, l'`await`
+  più esterno è ridondante (lo fa il runtime) — il codegen lo strippa.
+  Puoi scrivere indifferentemente con o senza.
+- `each ... in parallel` fuori da `async fn` continua a usare il
+  thread pool. Stesso linguaggio, due implementazioni di concorrenza
+  scelte automaticamente.
+
+### 3.12 Result types e operatore `?`
+
+`Ok(value)` e `Err(error)` sono dataclass built-in. L'operatore
+postfix `?` propaga l'`Err`:
+
+```cobra4
+fn parse_int(s) {
+    try {
+        return Ok(int(s))
+    } catch ValueError as _ {
+        return Err("not a number: {s}")
+    }
+}
+
+fn add_two(a, b) {
+    x = parse_int(a)?      # se Err, la fn ritorna subito quell'Err
+    y = parse_int(b)?
+    return Ok(x + y)
+}
+
+match add_two("3", "abc") {
+    case Ok(v)  { log("sum", v=v) }
+    case Err(e) { log("err", e=e) }
+}
+```
+
+**Regole**:
+
+- `?` esiste solo come postfix expression (`expr?`).
+- Distinto dall'operatore `?.` (safe-nav) — sono due token diversi.
+- Una fn che usa `?` viene auto-wrappata in try/except interno:
+  l'`Err` propagato diventa il return value della fn.
+- Se applicato a qualcosa che non è `Ok` o `Err` → `TypeError` a
+  runtime.
+
+### 3.13 Streaming
+
+Il modulo `cobra4.runtime.stream` fornisce primitive async per
+pipeline di eventi:
+
+```cobra4
+use asyncio
+use cobra4.runtime.stream as s
+
+async fn pipeline() {
+    # tumbling window 5s su una coda di eventi
+    batches = await s.from_queue("orders").window(tumbling=5.0).collect()
+    each b in batches { process(b) }
+}
+```
+
+Sources: `from_iter(xs)`, `from_async(aiter)`, `from_queue(name)`.
+Operators: `.map(fn)`, `.filter(pred)`, `.take(n)`,
+`.window(size=N | tumbling=S | sliding=S, step=S)`, `.collect()`,
+`.for_each(fn)`. `Stream` è chainable; `.collect()` ritorna `list`,
+`.for_each()` consuma side-effect.
+
 ## 4. Funzioni
 
 ```cobra4
@@ -412,21 +506,39 @@ class Admin(User) {
 }
 ```
 
-**Niente `data class` "sintetico"**: la keyword `data` è riservata ma
-non c'è una shorthand simile a `data class Point(x, y)`. Per dataclass
-usa Python via `use`:
+**`data class` shorthand**: dataclass concisa con `__init__` /
+`__eq__` / `__repr__` generati:
 
 ```cobra4
-use dataclasses
+data class Point(x: int, y: int = 0)
+data class User(name: str, email: str)
 
-@dataclasses.dataclass
-class Point {
-    x: int = 0
-    y: int = 0
+p = Point(3)            # → Point(x=3, y=0)
+u = User("ada", "ada@x.io")
+```
+
+I campi senza default precedono quelli con default — l'ordine è
+auto-corretto dal codegen rispetto a quello che scrivi.
+
+**`data` per sum types** (varianti taggate, alternativa a Enum):
+
+```cobra4
+data Event {
+    OrderPlaced(id: str, total: float)
+    OrderRefunded(id: str, reason: str)
+    OrderShipped(id: str)
+}
+
+ev = OrderPlaced(id="x", total=42.5)
+match ev {
+    case OrderPlaced(id, total)   { ... }
+    case OrderRefunded(id, reason){ ... }
+    case OrderShipped(id)         { ... }
 }
 ```
 
-In alternativa, scrivi un `__init__` esplicito.
+Ogni variante è una dataclass figlia della classe base — il pattern
+matching usa il pattern `Constructor(args)` esistente.
 
 ---
 
