@@ -429,6 +429,19 @@ class Deploy(Stmt):
 
 
 @dataclass
+class Sandbox(Stmt):
+    """``sandbox [http, log] { body }`` — runtime capability mask.
+
+    Inside the block, calls to effectful builtins whose effect is not
+    in ``effects`` raise :class:`cobra4.runtime.effects.EffectViolation`.
+    Nesting intersects masks: a child cannot allow effects the parent
+    forbids.
+    """
+    effects: list[str] = field(default_factory=list)
+    body: list[Stmt] = field(default_factory=list)
+
+
+@dataclass
 class Use(Stmt):
     target: str = ""             # dotted name or string path
     is_string: bool = False      # True if `use "path"`

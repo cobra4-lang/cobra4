@@ -359,6 +359,17 @@ class _Transformer(Transformer):
     def effect_list(self, meta, children):
         return [str(c) for c in children]
 
+    def sandbox_stmt(self, meta, children):
+        # children: [SANDBOX_KW, effect_list?, block]
+        eff_list: list[str] = []
+        body: list[N.Stmt] = []
+        for c in children:
+            if isinstance(c, list) and c and isinstance(c[0], str):
+                eff_list = c
+            elif isinstance(c, _Block):
+                body = c.statements
+        return N.Sandbox(effects=eff_list, body=body, loc=_loc(meta))
+
     def fn_block_body(self, meta, children):
         return _FnBodyBlock(statements=children[0].statements)
 

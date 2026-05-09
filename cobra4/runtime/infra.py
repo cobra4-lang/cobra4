@@ -249,6 +249,12 @@ class _LocalFileAdapter:
 register_adapter("local.file", _LocalFileAdapter())
 
 
+# Side-effect import: registers `aws.s3` and `aws.lambda` adapters.
+# Lives in a separate module so the (heavy) boto3 dep stays lazy —
+# the AWS adapters delegate to a mock client when boto3 isn't installed.
+from cobra4.runtime import infra_aws as _aws_adapters  # noqa: E402, F401
+
+
 __all__ = [
     "Resource",
     "Action",

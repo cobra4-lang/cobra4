@@ -187,6 +187,9 @@ class SmartFn:
     _handlers: list[Handler] = field(default_factory=list)
     _cache: dict[tuple, Handler] = field(default_factory=dict)
     _has_custom: Optional[bool] = None  # cached "any handler uses `when`?"
+    # Optional effect required to invoke this SmartFn. Checked at call
+    # time against the active sandbox (if any). ``None`` = no check.
+    required_effect: Optional[str] = None
 
     @property
     def handlers(self) -> list[Handler]:
@@ -234,6 +237,9 @@ class SmartFn:
         return _do_register
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if self.required_effect is not None:
+            from cobra4.runtime.effects import check as _check_effect
+            _check_effect(self.required_effect)
         if not args:
             if self.default is not None:
                 return self.default(*args, **kwargs)

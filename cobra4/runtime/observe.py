@@ -104,15 +104,23 @@ class _LogProxy:
     """Callable + ``.warn`` / ``.error`` accessors."""
 
     def __call__(self, message: str = "", **fields: Any) -> None:
+        from cobra4.runtime.effects import check as _check_effect
+        _check_effect("log")
         _emit("info", message, fields)
 
     def info(self, message: str = "", **fields: Any) -> None:
+        from cobra4.runtime.effects import check as _check_effect
+        _check_effect("log")
         _emit("info", message, fields)
 
     def warn(self, message: str = "", **fields: Any) -> None:
+        from cobra4.runtime.effects import check as _check_effect
+        _check_effect("log")
         _emit("warn", message, fields)
 
     def error(self, message: str = "", **fields: Any) -> None:
+        from cobra4.runtime.effects import check as _check_effect
+        _check_effect("log")
         _emit("error", message, fields)
 
 

@@ -71,6 +71,7 @@ def _read_default(target: Any, **_) -> Any:
 
 
 read: SmartFn = make_smart("read", default=_read_default)
+read.required_effect = "fs"
 
 
 def _open_local_text(path: str) -> str:
@@ -162,6 +163,7 @@ def _save_default(value: Any, target: Any, **_) -> Any:
 
 
 save: SmartFn = make_smart("save", default=_save_default)
+save.required_effect = "fs"
 
 
 def _save_local_csv(value: Any, target: str, **_) -> str:

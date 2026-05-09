@@ -60,6 +60,8 @@ def _resolve_active() -> str:
 
 
 def secret(path: str) -> str:
+    from cobra4.runtime.effects import check as _check_effect
+    _check_effect("secret")
     backend = _resolve_active()
     if backend not in _backends:
         raise ValueError(f"secrets backend '{backend}' is not registered")

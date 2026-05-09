@@ -533,6 +533,18 @@ def cmd_plugin(args: argparse.Namespace) -> int:
     return 64
 
 
+def cmd_bench(args: argparse.Namespace) -> int:
+    """Run the built-in micro-benchmarks. Useful for catching
+    regressions before merging — save a baseline with
+    ``c4 bench --json baseline.json``, then on each PR
+    ``c4 bench --compare baseline.json``."""
+    from cobra4.tools.bench import cli_main
+    return cli_main(
+        args.targets, seconds=args.seconds,
+        json_path=args.json_out, compare_path=args.compare,
+    )
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     """Scaffold a new project from a template."""
     from cobra4 import templates as _templates
@@ -798,6 +810,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Stop after N seconds (used for tests; default = run until Ctrl-C)",
     )
     p_serve.set_defaults(handler=cmd_serve)
+
+    p_bench = sub.add_parser("bench", help="Run cobra4's built-in benchmarks")
+    p_bench.add_argument("targets", nargs="*",
+                         help="Subset to run (parser, codegen, smart-dispatch, workflow, async-parallel). Empty = all.")
+    p_bench.add_argument("--seconds", type=float, default=1.0,
+                         help="Wall-time budget per target (default 1.0)")
+    p_bench.add_argument("--json", dest="json_out",
+                         help="Write per-target results to a JSON file")
+    p_bench.add_argument("--compare", dest="compare",
+                         help="Compare against a previously-saved JSON file")
+    p_bench.set_defaults(handler=cmd_bench)
 
     p_init = sub.add_parser("init", help="Scaffold a new cobra4 project from a template")
     p_init.add_argument("name", nargs="?", help="Project directory name (must not exist)")

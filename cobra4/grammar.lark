@@ -50,6 +50,13 @@ pass_stmt: "pass"
               | try_stmt
               | serve_stmt
               | deploy_stmt
+              | sandbox_stmt
+
+// `sandbox [effs] { body }` — runtime capability mask. Inside the
+// block, calls to effectful builtins whose effect isn't in the list
+// raise EffectViolation.
+sandbox_stmt: SANDBOX_KW "[" effect_list? "]" block
+SANDBOX_KW: "sandbox"
 
 if_stmt: "if" expr block ("elif" expr block)* ("else" block)?
 while_stmt: "while" expr block

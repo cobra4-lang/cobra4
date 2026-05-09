@@ -227,6 +227,8 @@ def queue(name: str, *, kind: str | None = None, **kwargs) -> QueueLike:
 
     Caches by name so repeated calls return the same instance.
     """
+    from cobra4.runtime.effects import check as _check_effect
+    _check_effect("time")
     if name in _queues:
         return _queues[name]
 

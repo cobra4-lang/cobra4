@@ -306,6 +306,7 @@ def _run_default(cmd: Any, *, host: Optional[Host] = None, **kwargs: Any) -> Com
 
 
 run: SmartFn = make_smart("run", default=_run_default)
+run.required_effect = "ssh"
 
 
 # Convenience: run on each host in parallel.

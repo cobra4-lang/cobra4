@@ -45,7 +45,7 @@ match case try catch finally
 use as where every on event from to parallel with
 serve deploy lang
 async await
-workflow task resource
+workflow task resource sandbox
 ```
 
 ### 1.2 Commenti
@@ -512,6 +512,96 @@ processare il next.
 
 Vedi [RFC 0003](docs/rfc/0003-infra-as-code.md) per la roadmap (più
 adapter, S3 state backend, drift detection).
+
+### 3.18 Runtime sandbox (`sandbox [...] { ... }`)
+
+Capability mask attiva per il blocco. I builtin effettuali invocati
+dentro vengono controllati a runtime; se l'effect non è nella lista,
+sollevano `EffectViolation`:
+
+```cobra4
+sandbox [log] {
+    log("ok")                       # log è permesso
+    try {
+        save({"x": 1}, "./out.json") # fs NON permesso → EffectViolation
+    } catch EffectViolation as e {
+        log("blocked", err=str(e))
+    }
+}
+
+# Fuori dal sandbox: nessun controllo, comportamento immutato.
+```
+
+Built-in che fanno il check: `log`, `read`, `save` (effect `fs`),
+`run` (effect `ssh`), `secret` (`secret`), `queue` (`time`).
+
+Il sandbox **nidifica intersecando**: un blocco interno non può
+elevare; il suo set effettivo è `inner & outer`. Il check è
+thread-local — `each ... in parallel` non sgocciola tra worker.
+
+Differenze con `with [...]` su funzione:
+- `fn f() with [http]` è **statico** (warning E001 a `c4 check`).
+- `sandbox [http] { ... }` è **runtime** (eccezione a esecuzione).
+Si compongono: il primo cattura la maggior parte dei bug, il secondo
+intercetta le chiamate via plugin / dynamic dispatch che il checker
+non vede.
+
+### 3.19 Plugin Prometheus (`lang use prom`)
+
+```cobra4
+lang use prom
+
+metric counter requests_total labels=["method", "status"] doc="HTTP requests"
+metric histogram request_ms labels=["route"] buckets=[10.0, 50.0, 100.0] doc="Latency"
+metric gauge active doc="Active connections"
+
+requests_total.labels(method="GET", status="200").inc()
+request_ms.labels(route="/api").observe(42)
+active.set(7)
+
+# Esposizione
+fn metrics_handler(req) = prom.metrics_text()
+serve metrics_handler on :9090
+```
+
+Tre forme: `metric counter`, `metric histogram`, `metric gauge`.
+Argomenti supportati: `labels=[...]`, `buckets=[...]` (solo histogram),
+`doc="..."`. Il plugin riscrive in chiamate alla factory runtime.
+
+Backend: `prometheus_client` se installato (real metriche
+process-wide); altrimenti un fallback in-process con la stessa
+superficie API per i test.
+
+### 3.20 IaC adapter AWS
+
+Builtin extra a `local.file` (vedi sez. 3.16):
+
+| Adapter      | Campi richiesti                                   | Campi opzionali                                                |
+|--------------|----------------------------------------------------|----------------------------------------------------------------|
+| `aws.s3`     | `name`                                             | `region`, `tags` (`dict[str,str]`)                             |
+| `aws.lambda` | `name`, `handler`, `role`, `zip_path`             | `runtime` (default `python3.12`), `memory` (512), `timeout` (30), `env` |
+
+```cobra4
+resource artifacts = aws.s3 {
+    name: "my-app-data"
+    region: "eu-west-1"
+    tags: {"team": "platform"}
+}
+
+resource api = aws.lambda {
+    name: "my-app-api"
+    handler: "handler.main"
+    role: "arn:aws:iam::123:role/lambda-exec"
+    zip_path: "./build/api.zip"
+    memory: 1024
+    env: {"DB_URL": "postgres://..."}
+}
+```
+
+Esecuzione: `c4 infra apply infra.c4`. Production usa `boto3` (richiede
+`pip install cobra4[aws]`); senza boto3 entra in modalità mock
+(idempotent in-memory) — utile per `c4 infra plan` dry-run e per i
+test del CI.
 
 ### 3.17 LLM agents (`lang use llm` + `agent`)
 

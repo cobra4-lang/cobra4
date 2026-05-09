@@ -35,6 +35,9 @@ from cobra4.runtime.workflow import Workflow, WorkflowError
 from cobra4.runtime.llm import (
     AgentError, MockProvider, AnthropicProvider, set_provider, _c4_llm_run,
 )
+from cobra4.runtime.effects import (
+    EffectViolation, with_effects as _c4_effect_sandbox, check as _c4_effect_check,
+)
 
 __all__ = [
     "SmartFn",
@@ -88,4 +91,7 @@ __all__ = [
     "AnthropicProvider",
     "set_provider",
     "_c4_llm_run",
+    "EffectViolation",
+    "_c4_effect_sandbox",
+    "_c4_effect_check",
 ]

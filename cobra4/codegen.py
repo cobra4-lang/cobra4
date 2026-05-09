@@ -47,6 +47,7 @@ _RUNTIME_IMPORT = (
     "    queue, serve_forever,\n"
     "    Result, Ok, Err,\n"
     "    _c4_try_propagate, _C4Propagate,\n"
+    "    _c4_effect_sandbox, EffectViolation,\n"
     ")\n"
     "from cobra4.runtime.core import serve_handler as _c4_serve\n"
     "from cobra4.runtime.concurrency import async_parallel_for as _c4_async_parallel_for\n"
@@ -220,6 +221,10 @@ def _emit_stmt(em: _Emitter, s: N.Stmt) -> None:
         _emit_workflow(em, s, line)
     elif isinstance(s, N.ResourceDecl):
         _emit_resource(em, s, line)
+    elif isinstance(s, N.Sandbox):
+        effs_repr = ", ".join(repr(e) for e in s.effects)
+        em.write(f"with _c4_effect_sandbox({effs_repr}):", line)
+        _emit_block(em, s.body)
     elif isinstance(s, N.Use):
         _emit_use(em, s, line)
     else:
