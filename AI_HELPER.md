@@ -513,6 +513,58 @@ processare il next.
 Vedi [RFC 0003](docs/rfc/0003-infra-as-code.md) per la roadmap (più
 adapter, S3 state backend, drift detection).
 
+### 3.17 LLM agents (`lang use llm` + `agent`)
+
+```cobra4
+lang use llm
+use asyncio
+use cobra4.runtime.llm as _llm
+
+fn lookup_order(order_id: str) -> str {
+    "Look up an order in the system."
+    return "order {order_id}: shipped 2026-05-08"
+}
+
+agent customer_support(query: str) -> str with [http, log] {
+    tools: [lookup_order]
+    model: "claude-sonnet-4-6"
+    max_iters: 5
+    system "You are a concise support agent."
+    prompt "Customer question: {query}"
+}
+
+# Production: _llm.set_provider(_llm.AnthropicProvider())
+# Tests / offline: _llm.MockProvider(scripted=[Response(...), ...])
+_llm.set_provider(_llm.AnthropicProvider())
+
+answer = asyncio.run(customer_support("where is order 123?"))
+```
+
+`agent NAME(args) -> ret { ... }` is rewritten by the plugin to an
+`async fn` body that calls the runtime tool-loop. The fn signature is
+preserved verbatim (so type checking + effect annotations + `with`
+clauses work as expected).
+
+**Field semantics**:
+
+- `tools: [...]` — list of cobra4 functions. Their docstring (first
+  line) becomes the tool description. Type hints become the JSON
+  schema. Sync and async tools both work.
+- `model: "..."` — provider-specific model name. Default
+  `claude-sonnet-4-6`.
+- `max_iters: N` — abort the loop if the LLM keeps requesting tools
+  past N rounds. Default `10`.
+- `system: "..."` — optional system prompt.
+- `prompt "..."` — required. **Cobra4 string interpolation handles
+  parameter substitution at agent-call time** (`{query}` in the
+  template is replaced by the agent's `query` arg) — the runtime never
+  templates server-side.
+
+**Provider abstraction**: `cobra4.runtime.llm` exposes
+`set_provider(...)`, with built-in `AnthropicProvider` (requires
+`pip install anthropic` + `ANTHROPIC_API_KEY`) and `MockProvider`
+(scripted responses for tests).
+
 ### 3.13 Streaming
 
 Il modulo `cobra4.runtime.stream` fornisce primitive async per

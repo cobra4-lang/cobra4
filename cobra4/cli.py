@@ -112,24 +112,88 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def _print_traceback_with_source_map(py_path: str, smap, c4_path: str) -> None:
-    """Rewrite Python tracebacks back to cobra4 line:col positions."""
-    tb_lines = traceback.format_exc().splitlines()
-    out = []
-    for line in tb_lines:
-        if py_path in line and ", line " in line:
+    """Rewrite Python tracebacks to point at the original cobra4 source.
+
+    Three improvements over plain ``traceback.format_exc()``:
+    1. Frames inside the temp .py get their file/line replaced with the
+       corresponding ``.c4:line:col`` and the *cobra4* source code line
+       (not the transpiled Python).
+    2. Frames inside cobra4's own machinery (cli.py, runpy, this
+       function) are dropped — they're never the user's bug. Set
+       ``COBRA4_TRACE_VERBOSE=1`` to keep them.
+    3. The ``(transpiled from ...)`` annotation is suppressed by
+       default; only shown in verbose mode for debugging the compiler.
+    """
+    import os as _os
+    verbose = _os.environ.get("COBRA4_TRACE_VERBOSE") == "1"
+
+    # Read the cobra4 source once so we can show the actual c4 line text.
+    try:
+        c4_lines = Path(c4_path).read_text().splitlines()
+    except OSError:
+        c4_lines = []
+
+    # `format_exc` produces our paragraph; we walk it line-by-line and
+    # rewrite. Each frame is two lines: a `File "..."` header and a
+    # source-text line.
+    raw = traceback.format_exc().splitlines()
+    out: list[str] = []
+    i = 0
+
+    def _is_internal_frame_header(ln: str) -> bool:
+        return ln.startswith("  File ") and (
+            "/cli.py" in ln
+            or "<frozen runpy>" in ln
+            or "_print_traceback_with_source_map" in ln
+        )
+
+    def _is_frame_header(ln: str) -> bool:
+        return ln.startswith("  File ")
+
+    while i < len(raw):
+        ln = raw[i]
+
+        # If we hit an internal frame header, skip it AND all of its
+        # body lines (source line + optional caret markers) until the
+        # next frame header (or the final exception line).
+        if not verbose and _is_internal_frame_header(ln):
+            i += 1
+            while i < len(raw) and not _is_frame_header(raw[i]) and raw[i].startswith(" "):
+                i += 1
+            continue
+
+        # Rewrite a user frame that points into our temp .py file.
+        if py_path in ln and ", line " in ln:
             try:
-                left, rest = line.split(", line ", 1)
+                left, rest = ln.split(", line ", 1)
                 num_str, *tail = rest.split(",", 1)
                 py_line = int(num_str)
                 c4_line, c4_col = smap.lookup_position(py_line, 0)
                 if c4_line:
                     pos = f"{c4_line}" if c4_col == 0 else f"{c4_line}:{c4_col}"
-                    line = f'  File "{c4_path}", line {pos} (transpiled from {py_path}:{py_line})'
+                    suffix = (
+                        f" (transpiled from {Path(py_path).name}:{py_line})"
+                        if verbose else ""
+                    )
+                    new_ln = f'  File "{c4_path}", line {pos}'
                     if tail:
-                        line += "," + tail[0]
+                        new_ln += "," + tail[0]
+                    new_ln += suffix
+                    out.append(new_ln)
+                    # Replace this frame's body (source line + optional
+                    # caret markers) with the actual cobra4 source.
+                    if 0 < c4_line <= len(c4_lines):
+                        out.append("    " + c4_lines[c4_line - 1].strip())
+                    i += 1
+                    while i < len(raw) and not _is_frame_header(raw[i]) and raw[i].startswith(" "):
+                        i += 1
+                    continue
             except Exception:
                 pass
-        out.append(line)
+
+        out.append(ln)
+        i += 1
+
     sys.stderr.write("\n".join(out) + "\n")
 
 
@@ -256,6 +320,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
             sys.path.insert(0, str(proj_root))
         runpy.run_path(tmp_path, run_name="__main__")
         serve_forever(timeout=args.timeout)
+    except SystemExit:
+        raise
+    except BaseException:
+        _print_traceback_with_source_map(tmp_path, smap, str(path))
+        return 1
     finally:
         try:
             Path(tmp_path).unlink()
@@ -464,6 +533,51 @@ def cmd_plugin(args: argparse.Namespace) -> int:
     return 64
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    """Scaffold a new project from a template."""
+    from cobra4 import templates as _templates
+
+    if args.list_templates:
+        print("Available templates:")
+        for name, fn in sorted(_templates.TEMPLATES.items()):
+            doc = (fn.__doc__ or "").strip().split("\n")[0]
+            print(f"  {name:<14}  {doc}")
+        return 0
+
+    if not args.name:
+        print("error: missing project name. Usage: c4 init NAME [--template TYPE]", file=sys.stderr)
+        return 1
+
+    target = Path(args.name)
+    if target.exists() and not args.force:
+        print(f"error: {target}/ already exists. Use --force to overwrite.", file=sys.stderr)
+        return 1
+
+    try:
+        files = _templates.render(args.template, target.name)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    for rel, content in files.items():
+        out = target / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content)
+
+    print(f"created {len(files)} files in {target}/")
+    print()
+    print("Next steps:")
+    print(f"  cd {target}")
+    if args.template == "etl-pipeline":
+        print(f"  c4 run src/main.c4")
+    elif args.template in ("http-service", "daemon"):
+        print(f"  c4 run src/main.c4   # one-shot smoke test")
+        print(f"  c4 serve src/main.c4 # boot the daemon")
+    elif args.template == "agent":
+        print(f"  c4 run src/main.c4   # mock provider, offline")
+    return 0
+
+
 def cmd_infra(args: argparse.Namespace) -> int:
     """Declarative infrastructure: import the file (collecting resource
     declarations as a side effect), then run the requested phase
@@ -483,6 +597,11 @@ def cmd_infra(args: argparse.Namespace) -> int:
         if str(proj_root) not in sys.path:
             sys.path.insert(0, str(proj_root))
         runpy.run_path(tmp_path, run_name="__main__")
+    except SystemExit:
+        raise
+    except BaseException:
+        _print_traceback_with_source_map(tmp_path, smap, str(path))
+        return 1
     finally:
         try:
             Path(tmp_path).unlink()
@@ -679,6 +798,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Stop after N seconds (used for tests; default = run until Ctrl-C)",
     )
     p_serve.set_defaults(handler=cmd_serve)
+
+    p_init = sub.add_parser("init", help="Scaffold a new cobra4 project from a template")
+    p_init.add_argument("name", nargs="?", help="Project directory name (must not exist)")
+    p_init.add_argument("--template", "-t", default="http-service",
+                        help="Template: http-service | etl-pipeline | agent | daemon (default: http-service)")
+    p_init.add_argument("--list", action="store_true", dest="list_templates",
+                        help="List available templates and exit")
+    p_init.add_argument("--force", action="store_true",
+                        help="Allow writing into an existing directory")
+    p_init.set_defaults(handler=cmd_init)
 
     p_infra = sub.add_parser("infra", help="Declarative infrastructure (resource declarations)")
     p_infra.add_argument("action", choices=["plan", "apply", "destroy"])

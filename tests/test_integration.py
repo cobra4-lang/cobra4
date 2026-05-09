@@ -269,6 +269,7 @@ def test_streaming_window_and_collect_inside_async_fn(tmp_path: Path) -> None:
     "examples/03_etl.c4",
     "examples/05_schedule.c4",
     "examples/08_stdlib_dogfood.c4",
+    "examples/11_code_reviewer.c4",
 ])
 def test_existing_examples_still_pass(ex: str) -> None:
     """If any of the new features broke a pre-existing example, this

@@ -30,3 +30,4 @@ site/
 
 # stdlib dogfood example output
 _stdlib_report.json
+_review_report.json

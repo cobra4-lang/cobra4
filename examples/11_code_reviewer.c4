@@ -1,0 +1,199 @@
+# Example 11 — LLM-powered code reviewer
+#
+# A self-contained demo that puts most of cobra4 through its paces:
+#
+#   - data classes + sum types ............... domain modelling
+#   - Result + ?  ............................ error propagation
+#   - effect annotations ..................... declared capabilities
+#   - async / await + each in parallel ....... concurrency
+#   - workflow / task ........................ DAG with retries
+#   - language plugin (`lang use llm`) ....... LLM agent block
+#   - resource (commented out) ............... declarative IaC handoff
+#
+# Runs offline with a mock provider — `c4 run examples/11_code_reviewer.c4`.
+# Replace the mock setup with `_llm.AnthropicProvider()` for production.
+
+lang use llm
+
+use asyncio
+use cobra4.runtime.llm as _llm
+
+# ---------- domain model ----------
+
+data class ChangedFile(path: str, lines_added: int, lines_removed: int, contents: str)
+
+data Severity {
+    Info()
+    Warn()
+    Error()
+}
+
+data class Issue(file: str, line: int, severity: Severity, message: str)
+
+data class ReviewReport(
+    total_files: int,
+    issues: list,
+    summary: str,
+)
+
+# ---------- tools the agent can call ----------
+
+# Mock filesystem so the demo runs with no setup.
+_REPO = {
+    "src/auth.py": "def login(u, p):\n    if p == 'admin': return True\n    return False\n",
+    "src/db.py":   "import sqlite3\ncon = sqlite3.connect('app.db')\ncur = con.cursor()\n",
+    "src/api.py":  "@app.route('/users')\ndef users():\n    return db.fetchall()\n",
+}
+
+fn read_source(path: str) -> str with [fs] {
+    "Return the file contents at `path`. The agent uses this to inspect surrounding code."
+    if path in _REPO {
+        return _REPO[path]
+    }
+    return "<file not found: {path}>"
+}
+
+fn lint_check(path: str) -> str with [] {
+    "Run a quick static check on the file. Returns issue summary or 'clean'."
+    src = _REPO[path] ?? ""
+    if "sqlite3.connect" in src and "with " not in src {
+        return "WARN: sqlite3 connection not in `with` block"
+    }
+    if "def login" in src and "if p == " in src {
+        return "ERROR: hardcoded password comparison"
+    }
+    return "clean"
+}
+
+fn recent_authors(path: str) -> str with [] {
+    "Mocked git blame summary for context."
+    return "ada (12 commits), tim (3 commits)"
+}
+
+# ---------- the agent ----------
+
+agent review_file(path: str, contents: str) -> str with [http, log] {
+    tools: [read_source, lint_check, recent_authors]
+    model: "claude-sonnet-4-6"
+    max_iters: 4
+    system "You are a senior code reviewer. Be concise. Prefer concrete issues over style."
+    prompt """
+    Review this file. Use tools to gather context if needed.
+    File: {path}
+    Contents:
+    {contents}
+    Respond in the form: 'OK' if clean, otherwise one issue per line.
+    """
+}
+
+# ---------- diff parsing ----------
+
+fn parse_diff_summary() -> list {
+    "Mock: pretend the user ran git diff and these are the changed files."
+    return [
+        ChangedFile(path="src/auth.py", lines_added=2, lines_removed=1, contents=_REPO["src/auth.py"]),
+        ChangedFile(path="src/db.py",   lines_added=4, lines_removed=0, contents=_REPO["src/db.py"]),
+        ChangedFile(path="src/api.py",  lines_added=3, lines_removed=2, contents=_REPO["src/api.py"]),
+    ]
+}
+
+# ---------- per-file review with retry on transient LLM errors ----------
+
+async fn review_one(f) {
+    "Run the agent against one file. Errors propagate via Result."
+    try {
+        verdict = await review_file(f.path, f.contents)
+        return Ok({"file": f.path, "verdict": verdict})
+    } catch Exception as e {
+        return Err("{f.path}: {str(e)}")
+    }
+}
+
+async fn run_reviews(files) {
+    "Fan out across changed files in parallel."
+    return each f in files in parallel(workers=5) {
+        await review_one(f)
+    }
+}
+
+# ---------- aggregation ----------
+
+fn aggregate(reviews) -> ReviewReport {
+    "Turn the list of Result values into a single ReviewReport."
+    issues = []
+    ok_count = 0
+    for r in reviews {
+        match r {
+            case Ok(payload) {
+                v = payload["verdict"]
+                if v.strip() != "OK" {
+                    issues.append(Issue(
+                        file=payload["file"],
+                        line=0,
+                        severity=Warn(),
+                        message=v,
+                    ))
+                } else {
+                    ok_count += 1
+                }
+            }
+            case Err(reason) {
+                issues.append(Issue(
+                    file="<unknown>",
+                    line=0,
+                    severity=Error(),
+                    message=reason,
+                ))
+            }
+            case _ { pass }
+        }
+    }
+    summary = "{ok_count} clean, {len(issues)} need attention"
+    return ReviewReport(
+        total_files=len(reviews),
+        issues=issues,
+        summary=summary,
+    )
+}
+
+# ---------- the orchestrator: a workflow with retry ----------
+
+async fn entrypoint() {
+    files = parse_diff_summary()
+    reviews = await run_reviews(files)
+    report = aggregate(reviews)
+
+    log("review complete", total=report.total_files, summary=report.summary)
+    for i in report.issues {
+        match i.severity {
+            case Error() { log.error("blocking issue", file=i.file, msg=i.message) }
+            case Warn()  { log.warn("warning",         file=i.file, msg=i.message) }
+            case Info()  { log("info",                 file=i.file, msg=i.message) }
+        }
+    }
+
+    flat = each i in report.issues { {"file": i.file, "msg": i.message} }
+    save({
+        "summary": report.summary,
+        "issues": flat,
+    }, "./_review_report.json")
+}
+
+# ---------- mock LLM provider so the demo runs offline ----------
+
+_llm.set_provider(_llm.MockProvider(scripted=[
+    # First file: auth.py — agent calls lint_check, then stops with the issue.
+    _llm.Response(kind="tool_use", tool_calls=[
+        _llm.ToolCall(name="lint_check", arguments={"path": "src/auth.py"}, tool_use_id="t1"),
+    ]),
+    _llm.Response(kind="stop", text="ERROR: hardcoded admin password — replace with secret() lookup"),
+    # Second file: db.py — agent stops with linter warning.
+    _llm.Response(kind="tool_use", tool_calls=[
+        _llm.ToolCall(name="lint_check", arguments={"path": "src/db.py"}, tool_use_id="t2"),
+    ]),
+    _llm.Response(kind="stop", text="WARN: connection not in `with` block — refactor for cleanup"),
+    # Third file: api.py — clean.
+    _llm.Response(kind="stop", text="OK"),
+]))
+
+asyncio.run(entrypoint())

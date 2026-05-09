@@ -120,7 +120,24 @@ def generate(module: N.Module, cobra4_path: str = "") -> CodegenResult:
 def _emit_stmt(em: _Emitter, s: N.Stmt) -> None:
     line = s.loc.line if s.loc else 0
     if isinstance(s, N.ExprStmt):
-        em.write(_expr(s.value), line)
+        # `each x in xs { ... }` at statement level: the parser wraps
+        # it in an ExprStmt because cobra4 grammar only has `each_expr`.
+        # Compiling the lambda form here loses side-effect statements
+        # in the body (assignments can't run inside a Python lambda's
+        # expression context). Recover by emitting a real `for` loop —
+        # the result list isn't used anyway in statement context.
+        if isinstance(s.value, N.EachExpr) and not s.value.parallel:
+            ee = s.value
+            em.write(f"for {ee.var} in {_expr(ee.iterable)}:", line)
+            if ee.where is not None:
+                em.indent_level += 1
+                em.write(f"if not ({_expr(ee.where)}):")
+                em.indent_level += 1
+                em.write("continue")
+                em.indent_level -= 2
+            _emit_block(em, ee.body)
+        else:
+            em.write(_expr(s.value), line)
     elif isinstance(s, N.Assign):
         targets = ", ".join(_expr(t) for t in s.targets)
         em.write(f"{targets} = {_expr(s.value)}", line)
