@@ -1,0 +1,111 @@
+# cobra4 stdlib: retry
+# Decorator + ad-hoc helper for retrying flaky operations with backoff.
+
+use time as _py_time
+use random as _random
+
+fn with_retry(fn_, max_attempts=3, backoff=0.5, max_backoff=30.0, jitter=True, retry_on=Exception) {
+    """Run fn_() with exponential backoff. Returns the result on success,
+    raises the last exception after max_attempts.
+
+    - backoff:     initial sleep in seconds; doubles each attempt
+    - max_backoff: caps the doubling so a long retry chain doesn't sleep forever
+    - jitter:      adds ±25% random noise so a thundering herd doesn't sync
+    - retry_on:    exception type (or tuple) to retry on; others propagate
+    """
+    last_exc = None
+    sleep_for = backoff
+    for attempt in range(max_attempts) {
+        try {
+            return fn_()
+        } catch retry_on as e {
+            last_exc = e
+            if attempt + 1 >= max_attempts {
+                raise
+            }
+            actual_sleep = sleep_for
+            if jitter {
+                actual_sleep = sleep_for * (0.75 + _random.random() * 0.5)
+            }
+            _py_time.sleep(min(actual_sleep, max_backoff))
+            sleep_for = min(sleep_for * 2, max_backoff)
+        }
+    }
+    if last_exc is not None { raise last_exc }
+}
+
+# ---------- decorator ----------
+
+fn _make_retry_wrapper(fn_, max_attempts, backoff, max_backoff, jitter, retry_on) {
+    "Build a retrying wrapper closure around fn_."
+    fn wrapped(*args, **kwargs) {
+        return with_retry(
+            fn() = fn_(*args, **kwargs),
+            max_attempts=max_attempts,
+            backoff=backoff,
+            max_backoff=max_backoff,
+            jitter=jitter,
+            retry_on=retry_on,
+        )
+    }
+    return wrapped
+}
+
+fn retry(max_attempts=3, backoff=0.5, max_backoff=30.0, jitter=True, retry_on=Exception) {
+    """Decorator form. Same options as with_retry.
+
+    Usage:
+        @retry.retry(max_attempts=5, backoff=1.0)
+        fn fetch_user(id) = http.get("https://api/users/{id}")
+    """
+    return fn(fn_) = _make_retry_wrapper(
+        fn_, max_attempts, backoff, max_backoff, jitter, retry_on,
+    )
+}
+
+# ---------- circuit-breaker (basic) ----------
+
+fn _make_circuit_wrapper(fn_, threshold, reset_after) {
+    "Build a circuit-breaker wrapper closure around fn_."
+    state = {"failures": 0, "opened_at": None}
+
+    fn wrapped(*args, **kwargs) {
+        now = _py_time.monotonic()
+        if state["opened_at"] is not None {
+            if now - state["opened_at"] < reset_after {
+                raise CircuitBreakerOpen("circuit open ({state['failures']} failures)")
+            }
+            state["opened_at"] = None
+        }
+        try {
+            result = fn_(*args, **kwargs)
+            state["failures"] = 0
+            return result
+        } catch Exception as e {
+            state["failures"] += 1
+            if state["failures"] >= threshold {
+                state["opened_at"] = now
+            }
+            raise
+        }
+    }
+    return wrapped
+}
+
+fn circuit_breaker(threshold=5, reset_after=30.0) {
+    """Open the circuit after `threshold` consecutive failures. After
+    `reset_after` seconds, the next call is a 'half-open' trial: if it
+    succeeds, the circuit closes again.
+
+    Usage:
+        @retry.circuit_breaker(threshold=3, reset_after=10.0)
+        fn risky_call() = ...
+
+    Raises CircuitBreakerOpen when the circuit is open."""
+    return fn(fn_) = _make_circuit_wrapper(fn_, threshold, reset_after)
+}
+
+class CircuitBreakerOpen(Exception) {
+    "Raised by a @circuit_breaker'd function when the circuit is open."
+    pass
+}

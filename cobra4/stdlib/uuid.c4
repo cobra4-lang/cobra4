@@ -1,0 +1,53 @@
+# cobra4 stdlib: uuid
+# UUID generation + parsing + variants. Thin wrapper around `uuid`.
+
+use uuid as _py_uuid
+
+fn new() {
+    "Generate a random UUID (v4). Returns the canonical hex string."
+    return str(_py_uuid.uuid4())
+}
+
+fn v4() = new()
+
+fn v1() {
+    """Generate a v1 UUID (host-MAC + timestamp). Use v4 unless you have a
+    specific reason — v1 leaks the MAC address."""
+    return str(_py_uuid.uuid1())
+}
+
+fn v5(namespace, name) {
+    """Deterministic v5 UUID (SHA-1 of namespace + name). Same inputs always
+    produce the same UUID — useful for content-addressed identifiers.
+    `namespace` may be a UUID string or one of the standard namespaces:
+    'dns', 'url', 'oid', 'x500'."""
+    namespaces = {
+        "dns":  _py_uuid.NAMESPACE_DNS,
+        "url":  _py_uuid.NAMESPACE_URL,
+        "oid":  _py_uuid.NAMESPACE_OID,
+        "x500": _py_uuid.NAMESPACE_X500,
+    }
+    ns = namespaces[namespace] if namespace in namespaces else _py_uuid.UUID(namespace)
+    return str(_py_uuid.uuid5(ns, name))
+}
+
+fn parse(s) {
+    """Parse a UUID string. Accepts canonical, no-hyphens, and braced forms.
+    Returns the canonical hex string. Raises ValueError on invalid input."""
+    return str(_py_uuid.UUID(s))
+}
+
+fn is_valid(s) {
+    "True if s parses as a valid UUID."
+    try {
+        _py_uuid.UUID(s)
+        return True
+    } catch Exception as _ {
+        return False
+    }
+}
+
+fn short() {
+    "First 8 hex characters of a v4 — for short display IDs (NOT unique)."
+    return new()[:8]
+}

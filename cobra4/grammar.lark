@@ -81,7 +81,10 @@ case_clause: "case" pattern_or case_guard? block
 case_guard: "if" expr_no_in
 pattern_or: pattern ("|" pattern)*
 
+// `try` requires either at least one catch, or a finally — but not
+// "try {} alone". Matches Python's grammar.
 try_stmt: "try" block catch_clause+ finally_clause?
+        | "try" block finally_clause
 catch_clause: "catch" expr ("as" NAME)? block
 finally_clause: "finally" block
 

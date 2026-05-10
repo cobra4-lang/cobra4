@@ -73,6 +73,18 @@ def _leave_async() -> None:
     _ASYNC_DEPTH -= 1
 
 
+class CodegenError(Exception):
+    """Compile-time error from the cobra4 codegen — emitted when a
+    construct is syntactically valid but cannot be lowered to Python
+    expressions (e.g. a multi-statement lambda body in expression
+    position). Carries an optional source ``loc`` for the CLI to point
+    back at the user's `.c4` line."""
+
+    def __init__(self, message: str, loc=None) -> None:
+        super().__init__(message)
+        self.loc = loc
+
+
 @dataclass
 class CodegenResult:
     code: str
@@ -743,17 +755,19 @@ def _lambda_to_str(e: N.Lambda) -> str:
     params = _params_str(e.params)
     if e.body is not None:
         return f"(lambda {params}: {_expr(e.body)})"
-    # Block lambda → emit a synthetic helper: `(lambda *_a, **_k: __c4_block(...))`.
-    # In M1 we accept the limitation and lower to a Python lambda only if the
-    # block is a single-return statement. Otherwise, fall back to def-then-name.
     if e.block and len(e.block) == 1 and isinstance(e.block[0], N.Return):
         ret = e.block[0]
         return f"(lambda {params}: {_expr(ret.value)})"
-    # Generic block lambda: use a nested def via walrus is not viable in
-    # expression position; we emit a comprehension-friendly inline form using
-    # a tuple of side-effect statements only when none returns. M1 supports
-    # the common case (single expression / single return) only.
-    return f"(lambda {params}: _c4_unsupported_block_lambda())"
+    # Multi-statement block lambdas can't fit in a Python lambda
+    # expression. Rather than emitting a call to a never-defined helper
+    # (which used to crash at runtime), raise a compile-time error so
+    # the user gets the message at `c4 build` / `c4 run` time with a
+    # source location, not deep inside a generated lambda invocation.
+    raise CodegenError(
+        "block-bodied lambda with multiple statements is not supported "
+        "in expression position; extract it into a named `fn`",
+        getattr(e, "loc", None),
+    )
 
 
 def _each_expr_to_str(e: N.EachExpr) -> str:

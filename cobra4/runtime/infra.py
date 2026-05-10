@@ -134,9 +134,28 @@ def load_state(path: Optional[Path] = None) -> dict[str, dict[str, Any]]:
 
 
 def save_state(state: dict[str, dict[str, Any]], path: Optional[Path] = None) -> None:
+    """Persist state to disk **atomically** — write to a temp file in
+    the same directory (unique per-process/per-thread to avoid two
+    concurrent writers colliding on the same tmp name), fsync, then
+    ``os.replace()``. A crash mid-write leaves either the old state or
+    the new state, never a half-written file (which would break every
+    subsequent ``plan`` / ``apply`` until manually fixed)."""
+    import threading
     p = path or _default_state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(state, indent=2, sort_keys=True))
+    payload = json.dumps(state, indent=2, sort_keys=True)
+    # Unique tmp suffix so two threads (or processes) writing the same
+    # state file don't both rename the same tmp out from under each other.
+    tag = f".{os.getpid()}.{threading.get_ident()}.tmp"
+    tmp = p.with_suffix(p.suffix + tag)
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(payload)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass  # fsync not supported on some FS — best effort
+    os.replace(tmp, p)
 
 
 # ---------- phases ----------
@@ -249,10 +268,11 @@ class _LocalFileAdapter:
 register_adapter("local.file", _LocalFileAdapter())
 
 
-# Side-effect import: registers `aws.s3` and `aws.lambda` adapters.
-# Lives in a separate module so the (heavy) boto3 dep stays lazy —
-# the AWS adapters delegate to a mock client when boto3 isn't installed.
+# Side-effect imports: register `aws.*` and `k8s.*` adapters.
+# Each lives in its own module so heavy deps (boto3, kubectl) stay
+# lazy — adapters delegate to mocks when their backend isn't available.
 from cobra4.runtime import infra_aws as _aws_adapters  # noqa: E402, F401
+from cobra4.runtime import infra_k8s as _k8s_adapters  # noqa: E402, F401
 
 
 __all__ = [

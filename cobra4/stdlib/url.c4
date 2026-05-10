@@ -1,0 +1,74 @@
+# cobra4 stdlib: url
+# URL parsing, building, query-string manipulation. Built on
+# `urllib.parse` — no external dep.
+
+use urllib.parse as _up
+
+fn parse(url) {
+    """Decompose a URL into a dict with scheme, host, port, path, query, fragment.
+    `query` is a dict of {{str: list[str]}} (a key can have multiple values)."""
+    p = _up.urlparse(url)
+    return {
+        "scheme":   p.scheme,
+        "host":     p.hostname,
+        "port":     p.port,
+        "user":     p.username,
+        "password": p.password,
+        "path":     p.path,
+        "query":    _up.parse_qs(p.query) if p.query else {},
+        "fragment": p.fragment,
+    }
+
+}
+
+fn build(scheme, host, path="/", query=None, port=None, fragment="") {
+    "Compose a URL from parts. `query` may be a dict — values are encoded."
+    netloc = host
+    if port is not None { netloc = "{host}:{port}" }
+    q = ""
+    if query {
+        # urlencode wants flat tuples; expand list-valued keys.
+        flat = []
+        for k in query {
+            v = query[k]
+            if isinstance(v, list) {
+                for item in v { flat.append((k, str(item))) }
+            } else {
+                flat.append((k, str(v)))
+            }
+        }
+        q = _up.urlencode(flat)
+    }
+    return _up.urlunparse((scheme, netloc, path, "", q, fragment))
+}
+
+fn join(base, ref) {
+    "Resolve `ref` relative to `base`. Same rules as urllib.parse.urljoin."
+    return _up.urljoin(base, ref)
+}
+
+fn quote(s, safe="/") {
+    "Percent-encode a string for use in a URL path. By default leaves `/`."
+    return _up.quote(str(s), safe=safe)
+}
+
+fn unquote(s) {
+    "Reverse percent-encoding."
+    return _up.unquote(s)
+}
+
+fn encode_query(params) {
+    "Encode a dict (or list of tuples) as a query string."
+    return _up.urlencode(params, doseq=True)
+}
+
+fn decode_query(qs) {
+    "Parse a query string into a dict of {{str: list[str]}}."
+    return _up.parse_qs(qs)
+}
+
+# ---------- convenience: getters from a parsed dict ----------
+
+fn host_of(url) = parse(url)["host"]
+fn path_of(url) = parse(url)["path"]
+fn query_of(url) = parse(url)["query"]

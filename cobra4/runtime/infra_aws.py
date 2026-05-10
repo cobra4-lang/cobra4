@@ -302,8 +302,263 @@ register_adapter("aws.s3", S3Adapter())
 register_adapter("aws.lambda", LambdaAdapter())
 
 
+# ---------- mock RDS / IAM clients ----------
+
+
+class _MockRDS:
+    def __init__(self) -> None:
+        self.instances: dict[str, dict] = {}
+        self.calls: list[tuple] = []
+
+    def describe_db_instances(self, *, DBInstanceIdentifier: str) -> dict:
+        self.calls.append(("describe", DBInstanceIdentifier))
+        if DBInstanceIdentifier not in self.instances:
+            from botocore.exceptions import ClientError  # type: ignore
+            raise ClientError({"Error": {"Code": "DBInstanceNotFound"}}, "DescribeDBInstances")
+        return {"DBInstances": [dict(self.instances[DBInstanceIdentifier])]}
+
+    def create_db_instance(self, **kw) -> dict:
+        self.calls.append(("create", kw["DBInstanceIdentifier"]))
+        self.instances[kw["DBInstanceIdentifier"]] = dict(kw)
+        return {"DBInstance": dict(kw)}
+
+    def modify_db_instance(self, **kw) -> dict:
+        self.calls.append(("modify", kw["DBInstanceIdentifier"]))
+        if kw["DBInstanceIdentifier"] in self.instances:
+            self.instances[kw["DBInstanceIdentifier"]].update(kw)
+        return {}
+
+    def delete_db_instance(self, *, DBInstanceIdentifier: str, **_) -> dict:
+        self.calls.append(("delete", DBInstanceIdentifier))
+        self.instances.pop(DBInstanceIdentifier, None)
+        return {}
+
+
+class _MockIAM:
+    def __init__(self) -> None:
+        self.roles: dict[str, dict] = {}
+        self.attached: dict[str, set] = {}
+        self.calls: list[tuple] = []
+
+    def get_role(self, *, RoleName: str) -> dict:
+        self.calls.append(("get_role", RoleName))
+        if RoleName not in self.roles:
+            from botocore.exceptions import ClientError  # type: ignore
+            raise ClientError({"Error": {"Code": "NoSuchEntity"}}, "GetRole")
+        return {"Role": dict(self.roles[RoleName])}
+
+    def create_role(self, **kw) -> dict:
+        self.calls.append(("create_role", kw["RoleName"]))
+        self.roles[kw["RoleName"]] = dict(kw)
+        return {"Role": dict(kw)}
+
+    def update_assume_role_policy(self, **kw) -> dict:
+        self.calls.append(("update_assume_role_policy", kw["RoleName"]))
+        if kw["RoleName"] in self.roles:
+            self.roles[kw["RoleName"]]["AssumeRolePolicyDocument"] = kw["PolicyDocument"]
+        return {}
+
+    def attach_role_policy(self, *, RoleName: str, PolicyArn: str) -> dict:
+        self.calls.append(("attach", RoleName, PolicyArn))
+        self.attached.setdefault(RoleName, set()).add(PolicyArn)
+        return {}
+
+    def detach_role_policy(self, *, RoleName: str, PolicyArn: str) -> dict:
+        self.calls.append(("detach", RoleName, PolicyArn))
+        self.attached.get(RoleName, set()).discard(PolicyArn)
+        return {}
+
+    def list_attached_role_policies(self, *, RoleName: str) -> dict:
+        self.calls.append(("list_attached", RoleName))
+        arns = sorted(self.attached.get(RoleName, set()))
+        return {"AttachedPolicies": [{"PolicyArn": a} for a in arns]}
+
+    def delete_role(self, *, RoleName: str) -> dict:
+        self.calls.append(("delete_role", RoleName))
+        self.roles.pop(RoleName, None)
+        self.attached.pop(RoleName, None)
+        return {}
+
+
+# Allow injecting RDS / IAM mocks. Test clients tuple is
+# (s3, lambda, rds, iam) — older code only uses the first two.
+
+def set_test_rds_iam_clients(rds: Any, iam: Any) -> None:
+    """Inject RDS + IAM mock clients alongside the existing s3/lambda."""
+    global _TEST_CLIENTS
+    cur = _TEST_CLIENTS or (_MockS3(), _MockLambda())
+    _TEST_CLIENTS = (cur[0], cur[1], rds, iam)
+
+
+def _make_rds_client() -> Any:
+    if _TEST_CLIENTS is not None and len(_TEST_CLIENTS) >= 3:
+        return _TEST_CLIENTS[2]
+    try:
+        import boto3  # type: ignore
+    except ImportError:
+        return _MockRDS()
+    return boto3.client("rds")
+
+
+def _make_iam_client() -> Any:
+    if _TEST_CLIENTS is not None and len(_TEST_CLIENTS) >= 4:
+        return _TEST_CLIENTS[3]
+    try:
+        import boto3  # type: ignore
+    except ImportError:
+        return _MockIAM()
+    return boto3.client("iam")
+
+
+# ---------- aws.rds adapter ----------
+
+
+class RDSAdapter:
+    """Manage an RDS DB instance. Required: ``name``, ``engine``,
+    ``instance_class``, ``allocated_storage``, ``master_username``,
+    ``master_password``. Optional: ``port``, ``publicly_accessible``."""
+
+    def plan(self, current: dict, desired: dict) -> Action:
+        name = desired.get("name")
+        if not name:
+            raise InfraError("aws.rds: required field 'name' is missing")
+        for f in ("engine", "instance_class", "allocated_storage", "master_username", "master_password"):
+            if not desired.get(f):
+                raise InfraError(f"aws.rds {name!r}: required field {f!r} is missing")
+        if not current:
+            return Action(kind="create", notes=f"create rds {name}")
+        diff = {}
+        for f in ("instance_class", "allocated_storage", "publicly_accessible"):
+            if current.get(f) != desired.get(f):
+                diff[f] = (current.get(f), desired.get(f))
+        if not diff:
+            return Action(kind="noop", notes=f"rds {name} matches state")
+        return Action(kind="update", diff=diff, notes=f"update rds {name}")
+
+    def apply(self, current: dict, desired: dict) -> dict:
+        rds = _make_rds_client()
+        name = desired["name"]
+        params = {
+            "DBInstanceIdentifier": name,
+            "Engine": desired["engine"],
+            "DBInstanceClass": desired["instance_class"],
+            "AllocatedStorage": int(desired["allocated_storage"]),
+            "MasterUsername": desired["master_username"],
+            "MasterUserPassword": desired["master_password"],
+        }
+        if "port" in desired:
+            params["Port"] = int(desired["port"])
+        if "publicly_accessible" in desired:
+            params["PubliclyAccessible"] = bool(desired["publicly_accessible"])
+
+        try:
+            rds.describe_db_instances(DBInstanceIdentifier=name)
+            exists = True
+        except Exception:
+            exists = False
+
+        if exists:
+            mod_params = {k: v for k, v in params.items() if k in (
+                "DBInstanceIdentifier", "DBInstanceClass", "AllocatedStorage",
+                "MasterUserPassword", "PubliclyAccessible",
+            )}
+            mod_params["ApplyImmediately"] = True
+            rds.modify_db_instance(**mod_params)
+        else:
+            rds.create_db_instance(**params)
+
+        return {
+            "name": name,
+            "engine": desired["engine"],
+            "instance_class": desired["instance_class"],
+            "allocated_storage": int(desired["allocated_storage"]),
+            "publicly_accessible": bool(desired.get("publicly_accessible", False)),
+        }
+
+    def destroy(self, current: dict) -> None:
+        rds = _make_rds_client()
+        name = current.get("name")
+        if name:
+            try:
+                rds.delete_db_instance(DBInstanceIdentifier=name, SkipFinalSnapshot=True)
+            except Exception:  # pragma: no cover
+                pass
+
+
+# ---------- aws.iam adapter ----------
+
+
+class IAMRoleAdapter:
+    """Manage an IAM role. Required: ``name``, ``assume_role_policy``
+    (JSON-serializable dict). Optional: ``policies`` (list of
+    managed-policy ARNs to attach)."""
+
+    def plan(self, current: dict, desired: dict) -> Action:
+        name = desired.get("name")
+        if not name:
+            raise InfraError("aws.iam: required field 'name' is missing")
+        if "assume_role_policy" not in desired:
+            raise InfraError(f"aws.iam {name!r}: 'assume_role_policy' is required")
+        if not current:
+            return Action(kind="create", notes=f"create iam role {name}")
+        diff = {}
+        if current.get("assume_role_policy") != desired.get("assume_role_policy"):
+            diff["assume_role_policy"] = (
+                current.get("assume_role_policy"),
+                desired.get("assume_role_policy"),
+            )
+        if set(current.get("policies", [])) != set(desired.get("policies", [])):
+            diff["policies"] = (current.get("policies", []), desired.get("policies", []))
+        if not diff:
+            return Action(kind="noop", notes=f"iam role {name} matches state")
+        return Action(kind="update", diff=diff, notes=f"update iam role {name}")
+
+    def apply(self, current: dict, desired: dict) -> dict:
+        import json as _json
+        iam = _make_iam_client()
+        name = desired["name"]
+        policy_doc = _json.dumps(desired["assume_role_policy"])
+
+        try:
+            iam.get_role(RoleName=name)
+            iam.update_assume_role_policy(RoleName=name, PolicyDocument=policy_doc)
+        except Exception:
+            iam.create_role(RoleName=name, AssumeRolePolicyDocument=policy_doc)
+
+        existing = iam.list_attached_role_policies(RoleName=name)
+        current_arns = {p["PolicyArn"] for p in existing.get("AttachedPolicies", [])}
+        desired_arns = set(desired.get("policies", []))
+        for arn in current_arns - desired_arns:
+            iam.detach_role_policy(RoleName=name, PolicyArn=arn)
+        for arn in desired_arns - current_arns:
+            iam.attach_role_policy(RoleName=name, PolicyArn=arn)
+
+        return {
+            "name": name,
+            "assume_role_policy": desired["assume_role_policy"],
+            "policies": sorted(desired_arns),
+        }
+
+    def destroy(self, current: dict) -> None:
+        iam = _make_iam_client()
+        name = current.get("name")
+        if not name:
+            return
+        try:
+            existing = iam.list_attached_role_policies(RoleName=name)
+            for p in existing.get("AttachedPolicies", []):
+                iam.detach_role_policy(RoleName=name, PolicyArn=p["PolicyArn"])
+            iam.delete_role(RoleName=name)
+        except Exception:  # pragma: no cover
+            pass
+
+
+register_adapter("aws.rds", RDSAdapter())
+register_adapter("aws.iam", IAMRoleAdapter())
+
+
 __all__ = [
-    "S3Adapter", "LambdaAdapter",
-    "set_test_clients", "reset_test_clients",
-    "_MockS3", "_MockLambda",
+    "S3Adapter", "LambdaAdapter", "RDSAdapter", "IAMRoleAdapter",
+    "set_test_clients", "set_test_rds_iam_clients", "reset_test_clients",
+    "_MockS3", "_MockLambda", "_MockRDS", "_MockIAM",
 ]

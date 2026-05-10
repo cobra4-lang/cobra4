@@ -1,0 +1,57 @@
+# cobra4 stdlib: random
+# Convenience wrappers around Python's `random` (for non-crypto use) and
+# `secrets` (for crypto-strength choices). Same naming for both — pass
+# `secure=True` to use the cryptographic RNG.
+
+use random as _random
+use secrets as _py_secrets
+
+fn int_in(low, high, secure=False) {
+    "Random integer in [low, high] inclusive. Uses `secrets` when secure=True."
+    if secure {
+        return low + _py_secrets.randbelow(high - low + 1)
+    }
+    return _random.randint(low, high)
+}
+
+fn float_in(low=0.0, high=1.0) {
+    """Random float in [low, high). Always uses the non-crypto RNG —
+    cryptography on floats is meaningless."""
+    return _random.uniform(low, high)
+}
+
+fn choice(seq, secure=False) {
+    "Pick one element uniformly. Raises IndexError on empty sequence."
+    if secure {
+        return _py_secrets.choice(seq)
+    }
+    return _random.choice(seq)
+}
+
+fn choices(seq, k=1, weights=None) {
+    "Pick k elements with replacement. Optional `weights` for non-uniform draw."
+    return _random.choices(seq, weights=weights, k=k)
+}
+
+fn sample(seq, k) {
+    "Pick k DISTINCT elements (no replacement). Raises ValueError if k > len(seq)."
+    return _random.sample(seq, k)
+}
+
+fn shuffle(seq) {
+    "Shuffle a list IN PLACE. Returns the same list for chaining."
+    _random.shuffle(seq)
+    return seq
+}
+
+fn shuffled(seq) {
+    "Return a NEW shuffled list, leaving the input untouched."
+    out = list(seq)
+    _random.shuffle(out)
+    return out
+}
+
+fn seed(value) {
+    "Seed the non-crypto RNG. Crypto RNG is not seedable (that's the point)."
+    _random.seed(value)
+}

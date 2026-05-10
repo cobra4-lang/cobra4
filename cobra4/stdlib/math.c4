@@ -1,0 +1,94 @@
+# cobra4 stdlib: math
+# Statistics + common numeric helpers. Built on Python's math + statistics.
+
+use math as _py_math
+use statistics as _stats
+
+# ---------- statistics ----------
+
+fn mean(xs) {
+    "Arithmetic mean. Empty input → 0.0."
+    if len(xs) == 0 { return 0.0 }
+    return _stats.mean(xs)
+}
+
+fn median(xs) {
+    "Median. Empty input → 0.0."
+    if len(xs) == 0 { return 0.0 }
+    return _stats.median(xs)
+}
+
+fn stdev(xs) {
+    "Sample standard deviation. Empty / single-element → 0.0."
+    if len(xs) < 2 { return 0.0 }
+    return _stats.stdev(xs)
+}
+
+fn variance(xs) {
+    "Sample variance. Empty / single-element → 0.0."
+    if len(xs) < 2 { return 0.0 }
+    return _stats.variance(xs)
+}
+
+fn percentile(xs, p) {
+    "p-th percentile of xs (p in [0, 100]). Uses linear interpolation."
+    if len(xs) == 0 { return 0.0 }
+    if len(xs) == 1 { return xs[0] }
+    sorted_xs = sorted(xs)
+    k = (len(sorted_xs) - 1) * (p / 100.0)
+    f = int(k)
+    c = k - f
+    if f + 1 >= len(sorted_xs) {
+        return sorted_xs[-1]
+    }
+    return sorted_xs[f] + (sorted_xs[f + 1] - sorted_xs[f]) * c
+}
+
+fn p50(xs) = percentile(xs, 50)
+fn p90(xs) = percentile(xs, 90)
+fn p95(xs) = percentile(xs, 95)
+fn p99(xs) = percentile(xs, 99)
+
+# ---------- common numeric helpers ----------
+
+fn clamp(x, low, high) {
+    "Constrain x to [low, high]."
+    if x < low { return low }
+    if x > high { return high }
+    return x
+}
+
+fn lerp(a, b, t) {
+    "Linear interpolation: returns a when t=0, b when t=1."
+    return a + (b - a) * t
+}
+
+fn sign(x) {
+    "1 if x > 0, -1 if x < 0, 0 if x == 0."
+    if x > 0 { return 1 }
+    if x < 0 { return -1 }
+    return 0
+}
+
+fn approx_eq(a, b, tol=1e-9) {
+    "True if a and b differ by at most tol (absolute)."
+    return abs(a - b) <= tol
+}
+
+# ---------- re-exports from python math ----------
+
+# Common functions accessible without `use math as ...`:
+pi = _py_math.pi
+e = _py_math.e
+fn sqrt(x) = _py_math.sqrt(x)
+fn floor(x) = _py_math.floor(x)
+fn ceil(x) = _py_math.ceil(x)
+fn log(x, base=None) {
+    "Natural log by default; pass base for log_base(x)."
+    if base is None { return _py_math.log(x) }
+    return _py_math.log(x, base)
+}
+fn exp(x) = _py_math.exp(x)
+fn sin(x) = _py_math.sin(x)
+fn cos(x) = _py_math.cos(x)
+fn tan(x) = _py_math.tan(x)

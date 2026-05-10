@@ -1,0 +1,116 @@
+# cobra4 stdlib: crypto
+# Hashes, HMAC, base64, secure random tokens. Wraps Python's hashlib,
+# hmac, base64, secrets — no extra dependency needed.
+
+use hashlib as _hashlib
+use hmac as _hmac
+use base64 as _b64
+use secrets as _py_secrets
+
+# ---------- hashes ----------
+
+fn sha256(payload) {
+    "SHA-256 hex digest. Accepts str (utf-8 encoded) or bytes."
+    if isinstance(payload, str) {
+        payload = payload.encode("utf-8")
+    }
+    return _hashlib.sha256(payload).hexdigest()
+}
+
+fn sha512(payload) {
+    "SHA-512 hex digest."
+    if isinstance(payload, str) {
+        payload = payload.encode("utf-8")
+    }
+    return _hashlib.sha512(payload).hexdigest()
+}
+
+fn md5(payload) {
+    "MD5 hex digest. Don't use for security — only for content addressing / cache keys."
+    if isinstance(payload, str) {
+        payload = payload.encode("utf-8")
+    }
+    return _hashlib.md5(payload).hexdigest()
+}
+
+fn blake2b(payload, digest_size=32) {
+    "BLAKE2b hex digest. Faster than SHA-512 with the same security profile."
+    if isinstance(payload, str) {
+        payload = payload.encode("utf-8")
+    }
+    return _hashlib.blake2b(payload, digest_size=digest_size).hexdigest()
+}
+
+# ---------- HMAC ----------
+
+fn hmac_sha256(key, message) {
+    "Keyed-hash message authentication code with SHA-256."
+    if isinstance(key, str) {
+        key = key.encode("utf-8")
+    }
+    if isinstance(message, str) {
+        message = message.encode("utf-8")
+    }
+    return _hmac.new(key, message, _hashlib.sha256).hexdigest()
+}
+
+fn hmac_verify(key, message, expected_digest) {
+    "Constant-time HMAC-SHA256 verification."
+    actual = hmac_sha256(key, message)
+    return _hmac.compare_digest(actual, expected_digest)
+}
+
+# ---------- base64 ----------
+
+fn b64_encode(payload) {
+    "Standard base64 encoding. Returns a str."
+    if isinstance(payload, str) {
+        payload = payload.encode("utf-8")
+    }
+    return _b64.b64encode(payload).decode("ascii")
+}
+
+fn b64_decode(s) {
+    "Standard base64 decode. Returns bytes."
+    return _b64.b64decode(s)
+}
+
+fn b64url_encode(payload) {
+    "URL-safe base64 (no `+` `/` `=` padding). Common for JWTs."
+    if isinstance(payload, str) {
+        payload = payload.encode("utf-8")
+    }
+    return _b64.urlsafe_b64encode(payload).rstrip("=".encode("ascii")).decode("ascii")
+}
+
+fn b64url_decode(s) {
+    "URL-safe base64 decode (re-adds the stripped padding)."
+    pad = 4 - (len(s) % 4)
+    if pad < 4 {
+        s = s + ("=" * pad)
+    }
+    return _b64.urlsafe_b64decode(s)
+}
+
+# ---------- secure random tokens ----------
+
+fn token_hex(nbytes=16) {
+    "Cryptographically secure random hex token. Default 16 bytes → 32 hex chars."
+    return _py_secrets.token_hex(nbytes)
+}
+
+fn token_urlsafe(nbytes=16) {
+    "Cryptographically secure URL-safe token (good for session ids, CSRF tokens)."
+    return _py_secrets.token_urlsafe(nbytes)
+}
+
+fn token_bytes(nbytes=16) {
+    "Raw bytes from the OS cryptographic RNG."
+    return _py_secrets.token_bytes(nbytes)
+}
+
+fn compare(a, b) {
+    """Constant-time string/bytes comparison — use this when comparing tokens
+    or HMAC digests, not `==` (which can leak via timing)."""
+    return _py_secrets.compare_digest(a, b)
+}

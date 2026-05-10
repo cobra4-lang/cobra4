@@ -1,0 +1,183 @@
+# cobra4 stdlib: validate
+# Lightweight data validation. Each check is a function value -> Optional[str]
+# (None / empty string = pass, string = error message).
+
+use re as _re
+
+class ValidationError(Exception) {
+    "Aggregated validation error. .errors is a list of messages."
+
+    fn __init__(self, errors) {
+        self.errors = errors
+        super().__init__("validation failed: " + ", ".join(errors))
+    }
+}
+
+fn validate(value, *checks) {
+    """Run a list of single-arg check functions against value.
+
+    Each check returns either None / True (pass) or a string (failure
+    message). On any failure, raises ValidationError with the full list.
+
+    Usage:
+        validate(email,
+            is_str,
+            min_length(5),
+            matches(r"[^@]+@[^@]+")
+        )
+    """
+    errors = []
+    for c in checks {
+        msg = c(value)
+        if isinstance(msg, str) and msg {
+            errors.append(msg)
+        }
+    }
+    if len(errors) > 0 {
+        raise ValidationError(errors)
+    }
+    return value
+}
+
+# ---------- primitive checks ----------
+
+fn is_str(v) {
+    if not isinstance(v, str) { return "expected str, got {type(v).__name__}" }
+    return None
+}
+
+fn is_int(v) {
+    if not isinstance(v, int) or isinstance(v, bool) {
+        return "expected int, got {type(v).__name__}"
+    }
+    return None
+}
+
+fn is_float(v) {
+    if not isinstance(v, float) { return "expected float, got {type(v).__name__}" }
+    return None
+}
+
+fn is_bool(v) {
+    if not isinstance(v, bool) { return "expected bool, got {type(v).__name__}" }
+    return None
+}
+
+fn is_list(v) {
+    if not isinstance(v, list) { return "expected list, got {type(v).__name__}" }
+    return None
+}
+
+fn is_dict(v) {
+    if not isinstance(v, dict) { return "expected dict, got {type(v).__name__}" }
+    return None
+}
+
+# ---------- closure-style checks (factory + named inner fn) ----------
+#
+# Each factory below returns a check function. cobra4 doesn't allow
+# block-bodied lambdas in expression position, so we build the inner
+# function as a named `fn` and return its closure.
+
+fn min_length(n) {
+    "Closure: check len(v) >= n."
+    fn _check(v) {
+        if len(v) < n { return "min length {n}, got {len(v)}" }
+        return None
+    }
+    return _check
+}
+
+fn max_length(n) {
+    "Closure: check len(v) <= n."
+    fn _check(v) {
+        if len(v) > n { return "max length {n}, got {len(v)}" }
+        return None
+    }
+    return _check
+}
+
+fn in_range(low, high) {
+    "Closure: check low <= v <= high."
+    fn _check(v) {
+        if v < low or v > high { return "expected in [{low}, {high}], got {v}" }
+        return None
+    }
+    return _check
+}
+
+fn matches(pattern) {
+    "Closure: check re.search(pattern, v) is not None."
+    fn _check(v) {
+        if _re.search(pattern, v) is None {
+            return "does not match pattern: {pattern}"
+        }
+        return None
+    }
+    return _check
+}
+
+fn one_of(*choices) {
+    "Closure: check v is in the listed set."
+    fn _check(v) {
+        if v not in choices {
+            return "expected one of {list(choices)}, got {v}"
+        }
+        return None
+    }
+    return _check
+}
+
+fn required_keys(*keys) {
+    "Closure: check that a dict has all the required keys."
+    fn _check(v) {
+        missing = []
+        for k in keys {
+            if k not in v { missing.append(k) }
+        }
+        if missing { return "missing required keys: {missing}" }
+        return None
+    }
+    return _check
+}
+
+# ---------- schema ----------
+
+fn _run_schema(v, spec) {
+    "Validate a dict against a spec. Returns the dict on success, raises ValidationError on failure."
+    errors = []
+    if not isinstance(v, dict) {
+        raise ValidationError(["expected dict, got {type(v).__name__}"])
+    }
+    for key in spec {
+        checks = spec[key]
+        if key not in v {
+            errors.append("{key}: missing")
+            continue
+        }
+        for c in checks {
+            msg = c(v[key])
+            if isinstance(msg, str) and msg {
+                errors.append("{key}: {msg}")
+            }
+        }
+    }
+    if errors {
+        raise ValidationError(errors)
+    }
+    return v
+}
+
+fn schema(spec) {
+    """Validate a dict against a {{key: [check, ...]}} spec.
+
+    Usage:
+        validator = schema({{
+            "email": [is_str, matches(r"[^@]+@[^@]+")],
+            "age":   [is_int, in_range(0, 150)],
+        }})
+        validator(payload)
+    """
+    fn _validator(v) = _run_schema(v, spec)
+    return _validator
+}

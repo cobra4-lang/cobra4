@@ -1,0 +1,89 @@
+# cobra4 stdlib: path
+# Path manipulation — join, split, parents, glob, exists. Thin wrappers
+# around pathlib so cobra4 code can stay readable.
+
+use pathlib as _pl
+use os.path as _ospath
+use glob as _glob
+
+fn join(*parts) {
+    "Join path segments using the OS-appropriate separator."
+    return str(_pl.Path(*parts))
+}
+
+fn split(path) {
+    "Split into (parent_dir, filename). The pair always re-joins to path."
+    p = _pl.Path(path)
+    return (str(p.parent), p.name)
+}
+
+fn parent(path) {
+    "Parent directory."
+    return str(_pl.Path(path).parent)
+}
+
+fn name(path) {
+    "File name (last component, with extension)."
+    return _pl.Path(path).name
+}
+
+fn stem(path) {
+    "File name without extension. `/a/b/c.txt` → `c`."
+    return _pl.Path(path).stem
+}
+
+fn suffix(path) {
+    "File extension with the leading dot. `/a/b/c.txt` → `.txt`. Empty if none."
+    return _pl.Path(path).suffix
+
+}
+
+fn with_suffix(path, new_suffix) {
+    "Return path with the extension replaced. Empty suffix removes it."
+    return str(_pl.Path(path).with_suffix(new_suffix))
+}
+
+fn exists(path) {
+    "True if path exists on disk."
+    return _pl.Path(path).exists()
+}
+
+fn is_file(path) = _pl.Path(path).is_file()
+fn is_dir(path) = _pl.Path(path).is_dir()
+
+fn absolute(path) {
+    "Resolve to an absolute path. Doesn't follow symlinks (use real() for that)."
+    return str(_pl.Path(path).absolute())
+}
+
+fn real(path) {
+    "Resolve to a real absolute path, following symlinks. Path must exist."
+    return str(_pl.Path(path).resolve())
+}
+
+fn home() = str(_pl.Path.home())
+fn cwd()  = str(_pl.Path.cwd())
+
+# ---------- listing / globbing ----------
+
+fn list_dir(path) {
+    "Direct children of a directory (paths, not just names)."
+    return each p in _pl.Path(path).iterdir() { str(p) }
+}
+
+fn glob(pattern, root=".") {
+    "Pattern match (`*.py`, `**/*.c4`). Returns matching paths."
+    return _glob.glob(pattern, root_dir=root, recursive=True)
+}
+
+# ---------- normalization ----------
+
+fn normalize(path) {
+    "Collapse `..` and `.` segments. Doesn't touch the disk."
+    return _ospath.normpath(path)
+}
+
+fn relative_to(path, anchor) {
+    "Express `path` as a relative path from `anchor`. Raises if outside."
+    return str(_pl.Path(path).relative_to(anchor))
+}

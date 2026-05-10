@@ -1,0 +1,129 @@
+# cobra4 stdlib: cache
+# Memoization helpers — LRU + TTL decorators built on functools.
+
+use time as _py_time
+use functools as _ft
+use threading as _threading
+
+fn lru(maxsize=128) {
+    """Decorator: cache results in an LRU keyed on positional+kwargs.
+
+    Usage:
+        @cache.lru(maxsize=256)
+        fn compute(x, y) { ... }
+    """
+    return fn(fn_) = _ft.lru_cache(maxsize=maxsize)(fn_)
+}
+
+fn unbounded() {
+    """Decorator: unbounded memoization. Use only when you know the keyspace
+    is finite (config lookups, constant inputs)."""
+    return fn(fn_) = _ft.lru_cache(maxsize=None)(fn_)
+}
+
+# ---------- TTL cache ----------
+
+# Each call to ttl(seconds=...) produces a fresh decorator with its own
+# store/order/lock. We do the closure construction via a named helper
+# function — cobra4 doesn't allow block-bodied lambdas in expression
+# position, so we route through a proper `fn` definition.
+
+fn _make_ttl_wrapper(fn_, seconds, maxsize) {
+    "Build the wrapper closure for a TTL-cached function."
+    store = {}
+    order = []
+    lock = _threading.Lock()
+
+    fn _evict_expired(now) {
+        i = 0
+        while i < len(order) {
+            k = order[i]
+            if k in store and now >= store[k]["expires"] {
+                store.pop(k, None)
+                order.pop(i)
+            } else {
+                i += 1
+            }
+        }
+    }
+
+    fn wrapped(*args, **kwargs) {
+        key = (args, tuple(sorted(kwargs.items())))
+        now = _py_time.monotonic()
+
+        lock.acquire()
+        try {
+            _evict_expired(now)
+            if key in store {
+                return store[key]["value"]
+            }
+        } finally {
+            lock.release()
+        }
+
+        value = fn_(*args, **kwargs)
+
+        lock.acquire()
+        try {
+            store[key] = {"value": value, "expires": now + seconds}
+            if key not in order {
+                order.append(key)
+            }
+            while len(order) > maxsize {
+                oldest = order.pop(0)
+                store.pop(oldest, None)
+            }
+        } finally {
+            lock.release()
+        }
+        return value
+    }
+
+    fn _cache_info() {
+        lock.acquire()
+        try {
+            return {"size": len(store), "maxsize": maxsize, "ttl_s": seconds}
+        } finally {
+            lock.release()
+        }
+    }
+
+    fn _cache_clear() {
+        lock.acquire()
+        try {
+            store.clear()
+            order.clear()
+        } finally {
+            lock.release()
+        }
+    }
+
+    wrapped._cache_info = _cache_info
+    wrapped._cache_clear = _cache_clear
+    return wrapped
+}
+
+fn ttl(seconds, maxsize=1024) {
+    """Decorator: TTL cache. Entries expire `seconds` after first insertion.
+
+    Best for HTTP responses, DNS lookups, slow API calls. Concurrent calls
+    with the same key may both execute (no single-flight) — keep the
+    simplicity, add Redis if you need it.
+
+    Usage:
+        @cache.ttl(seconds=60)
+        fn fetch_config() = http.get("https://config-svc/v1")
+    """
+    return fn(fn_) = _make_ttl_wrapper(fn_, seconds, maxsize)
+}
+
+# ---------- inspecting / clearing ----------
+
+fn clear(decorated_fn) {
+    "Wipe a cached function's stored entries. Works for both @lru and @ttl."
+    if hasattr(decorated_fn, "cache_clear") {
+        decorated_fn.cache_clear()
+    } elif hasattr(decorated_fn, "_cache_clear") {
+        decorated_fn._cache_clear()
+    }
+}

@@ -23,39 +23,86 @@ import re
 from cobra4.plugins.api import LanguagePlugin, register_plugin
 
 
-# Match `sql { ... }` blocks. The body may contain newlines; we use a
-# permissive non-greedy regex that bails out on a balanced closing `}`.
-# True nested SQL with `{` inside is rare; we accept the limitation in M5.
-_SQL_BLOCK = re.compile(r"sql\s*\{(?P<body>[^{}]*?)\}", re.DOTALL)
+# Match the opening of `sql { ... }`. Body matching is done with a
+# brace-aware scanner (below) so SQL strings containing `{` (JSON
+# predicates, format placeholders) don't terminate the block early.
+_SQL_HEADER = re.compile(r"sql\s*\{")
+
+
+def _find_sql_blocks(source: str):
+    """Yield ``(start, end, body)`` for every ``sql { ... }`` block.
+
+    The scanner tracks string state so a literal `{` or `}` inside an
+    SQL string doesn't throw off brace balance. Used instead of a plain
+    regex because the regex form
+    (``sql\\s*\\{(?P<body>[^{}]*?)\\}``) silently mis-parses anything
+    with braces in string literals."""
+    i = 0
+    while True:
+        m = _SQL_HEADER.search(source, i)
+        if not m:
+            return
+        body_start = m.end()
+        j = body_start
+        depth = 1
+        while j < len(source) and depth > 0:
+            c = source[j]
+            if c == "\\":
+                j += 2
+                continue
+            if c in ('"', "'"):
+                q = c
+                j += 1
+                while j < len(source) and source[j] != q:
+                    if source[j] == "\\":
+                        j += 2
+                    else:
+                        j += 1
+                j += 1
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    yield m.start(), j + 1, source[body_start:j]
+                    i = j + 1
+                    break
+            j += 1
+        else:
+            return  # unmatched brace — leave it for the main parser
 
 
 def _transform(source: str) -> str:
-    def _repl(m: re.Match) -> str:
-        body = m.group("body").strip()
-        # Escape embedded triple quotes; we wrap in r"""..."""-equivalent.
-        body_escaped = body.replace("\\", "\\\\").replace('"', '\\"')
-        return f'sql_run("{body_escaped}")'
-
-    return _SQL_BLOCK.sub(_repl, source)
+    out: list[str] = []
+    pos = 0
+    for start, end, body in _find_sql_blocks(source):
+        out.append(source[pos:start])
+        body_clean = body.strip()
+        body_escaped = body_clean.replace("\\", "\\\\").replace('"', '\\"')
+        out.append(f'sql_run("{body_escaped}")')
+        pos = end
+    out.append(source[pos:])
+    return "".join(out)
 
 
 def _preserve_for_format(source: str) -> tuple[str, list[tuple[str, str]]]:
     """For ``c4 fmt``: replace ``sql { ... }`` blocks with placeholder
     identifier calls so the body parses, and emit restorers so the
-    formatter output can put them back verbatim.
-    """
+    formatter output can put them back verbatim. Uses the same
+    brace-aware scanner as ``_transform`` so SQL strings containing
+    braces don't truncate the placeholder."""
+    out: list[str] = []
     restorers: list[tuple[str, str]] = []
-    counter = [0]
-
-    def _swap(m: re.Match) -> str:
-        idx = counter[0]
-        counter[0] += 1
+    pos = 0
+    for idx, (start, end, _body) in enumerate(_find_sql_blocks(source)):
         sentinel = f"_C4_SQL_PLACEHOLDER_{idx}()"
-        restorers.append((sentinel, m.group(0)))
-        return sentinel
-
-    body = _SQL_BLOCK.sub(_swap, source)
-    return body, restorers
+        out.append(source[pos:start])
+        out.append(sentinel)
+        restorers.append((sentinel, source[start:end]))
+        pos = end
+    out.append(source[pos:])
+    return "".join(out), restorers
 
 
 _default_engine = None
