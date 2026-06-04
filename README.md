@@ -140,7 +140,7 @@ to localhost by default, …).
 |----------------------|--------|
 | Compiler (Lark + AST + codegen + source-map)                              | ✅ |
 | Smart dispatch (`SmartFn`, `@smart`, type/scheme/ext/MIME/predicate)      | ✅ |
-| `read`/`save`: csv, json, jsonl, txt, md, parquet × file/http/s3         | ✅ |
+| `read`/`save`: csv, json, yaml/yml, jsonl, txt, md, parquet × file/http/s3 | ✅ |
 | `each ... in parallel`, `every`, `on event from`, `serve`                | ✅ |
 | `match`/`case` with OR-patterns, guards, list/dict/tuple destructure     | ✅ |
 | Resolver + gradual type checker + dispatch overlap analysis (`c4 check`) | ✅ |

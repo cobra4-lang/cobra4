@@ -130,6 +130,21 @@ def test_save_local_json_then_read():
         assert read(p) == {"x": 1}
 
 
+def test_save_local_yaml_then_read():
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "out.yml")
+        save({"x": 1, "items": ["a", "b"]}, p)
+        assert read(p) == {"x": 1, "items": ["a", "b"]}
+
+
+def test_read_local_yaml_dispatches_correctly():
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "data.yaml")
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write("x: 1\nitems:\n  - a\n  - b\n")
+        assert read(p) == {"x": 1, "items": ["a", "b"]}
+
+
 def test_save_local_csv_then_read():
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, "out.csv")

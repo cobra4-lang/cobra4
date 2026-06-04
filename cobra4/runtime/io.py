@@ -9,7 +9,7 @@ M1 supported sources:
 - ``./`` / ``file://`` — local filesystem
 - ``https://`` / ``http://`` — HTTP GET / PUT (PUT only as a courtesy stub)
 
-M1 supported formats: csv, json, jsonl, txt, md.
+M1 supported formats: csv, json, yaml/yml, jsonl, txt, md.
 Optional: parquet (requires ``cobra4[data]``).
 Optional: s3 (requires ``cobra4[aws]``).
 """
@@ -95,6 +95,14 @@ def _read_local_jsonl(target: str, **_) -> list[Any]:
 
 def _read_local_json(target: str, **_) -> Any:
     return json.loads(_open_local_text(target))
+
+
+def _read_local_yaml(target: str, **_) -> Any:
+    try:
+        import yaml  # type: ignore
+    except ImportError as e:  # pragma: no cover
+        raise RuntimeError("yaml support requires `cobra4[yaml]`") from e
+    return yaml.safe_load(_open_local_text(target))
 
 
 def _read_local_text(target: str, **_) -> str:
@@ -187,6 +195,14 @@ def _save_local_json(value: Any, target: str, **_) -> str:
     return _atomic_write_text(target, json.dumps(value, indent=2))
 
 
+def _save_local_yaml(value: Any, target: str, **_) -> str:
+    try:
+        import yaml  # type: ignore
+    except ImportError as e:  # pragma: no cover
+        raise RuntimeError("yaml support requires `cobra4[yaml]`") from e
+    return _atomic_write_text(target, yaml.safe_dump(value, sort_keys=False))
+
+
 def _save_local_jsonl(value: Any, target: str, **_) -> str:
     return _atomic_write_text(target, "\n".join(json.dumps(x) for x in value))
 
@@ -266,6 +282,8 @@ def _register_handlers() -> None:
     # read — local
     read.register(_read_local_csv, type=str, scheme="file", ext="csv", name="local-csv")
     read.register(_read_local_json, type=str, scheme="file", ext="json", name="local-json")
+    read.register(_read_local_yaml, type=str, scheme="file", ext="yaml", name="local-yaml")
+    read.register(_read_local_yaml, type=str, scheme="file", ext="yml", name="local-yml")
     read.register(_read_local_jsonl, type=str, scheme="file", ext="jsonl", name="local-jsonl")
     read.register(_read_local_text, type=str, scheme="file", ext="txt", name="local-txt")
     read.register(_read_local_text, type=str, scheme="file", ext="md", name="local-md")
@@ -285,6 +303,8 @@ def _register_handlers() -> None:
     # via a custom `when` predicate that inspects args[1].)
     save.register(_save_local_csv, when=_target_is("file", "csv"), name="local-csv-save")
     save.register(_save_local_json, when=_target_is("file", "json"), name="local-json-save")
+    save.register(_save_local_yaml, when=_target_is("file", "yaml"), name="local-yaml-save")
+    save.register(_save_local_yaml, when=_target_is("file", "yml"), name="local-yml-save")
     save.register(_save_local_jsonl, when=_target_is("file", "jsonl"), name="local-jsonl-save")
     save.register(_save_local_text, when=_target_is("file", "txt"), name="local-txt-save")
     save.register(_save_local_text, when=_target_is("file", "md"), name="local-md-save")
