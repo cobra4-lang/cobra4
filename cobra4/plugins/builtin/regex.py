@@ -21,7 +21,6 @@ import re
 
 from cobra4.plugins.api import LanguagePlugin, register_plugin
 
-
 _FLAG_MAP = {
     "i": "re.IGNORECASE",
     "m": "re.MULTILINE",

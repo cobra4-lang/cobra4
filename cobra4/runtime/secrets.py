@@ -18,7 +18,6 @@ import tomllib
 from pathlib import Path
 from typing import Callable, Optional
 
-
 _Backend = Callable[[str], str]
 _backends: dict[str, _Backend] = {}
 _active_backend: Optional[str] = None
@@ -35,7 +34,9 @@ def register_backend(name: str, fn: _Backend) -> None:
 def use_backend(name: str) -> None:
     global _active_backend
     if name not in _backends:
-        raise ValueError(f"unknown secrets backend '{name}' — registered: {list(_backends)}")
+        raise ValueError(
+            f"unknown secrets backend '{name}' — registered: {list(_backends)}"
+        )
     _active_backend = name
 
 
@@ -61,6 +62,7 @@ def _resolve_active() -> str:
 
 def secret(path: str) -> str:
     from cobra4.runtime.effects import check as _check_effect
+
     _check_effect("secret")
     backend = _resolve_active()
     if backend not in _backends:
@@ -72,7 +74,9 @@ def secret(path: str) -> str:
 
 
 def _env_backend(path: str) -> str:
-    env_name = "COBRA4_SECRET_" + path.upper().replace("/", "_").replace("-", "_").replace(".", "_")
+    env_name = "COBRA4_SECRET_" + path.upper().replace("/", "_").replace(
+        "-", "_"
+    ).replace(".", "_")
     val = os.environ.get(env_name)
     if val is None:
         # Fallback: try the path itself as an env var name.
@@ -87,7 +91,9 @@ def _env_backend(path: str) -> str:
 
 def _file_backend(path: str) -> str:
     """Read from ``~/.cobra4/secrets/<path>`` or a TOML file."""
-    base = Path(os.environ.get("COBRA4_SECRETS_DIR") or (Path.home() / ".cobra4" / "secrets"))
+    base = Path(
+        os.environ.get("COBRA4_SECRETS_DIR") or (Path.home() / ".cobra4" / "secrets")
+    )
     direct = base / path
     if direct.exists():
         return direct.read_text(encoding="utf-8").rstrip("\n")
@@ -114,9 +120,7 @@ def _vault_backend(path: str) -> str:
     try:
         import hvac  # type: ignore
     except ImportError as e:  # pragma: no cover
-        raise RuntimeError(
-            "Vault backend requires `pip install hvac`."
-        ) from e
+        raise RuntimeError("Vault backend requires `pip install hvac`.") from e
     addr = os.environ.get("VAULT_ADDR")
     token = os.environ.get("VAULT_TOKEN")
     if not addr or not token:
@@ -124,7 +128,9 @@ def _vault_backend(path: str) -> str:
     client = hvac.Client(url=addr, token=token)
     mount, _, key = path.partition("/")
     secret_path = key
-    resp = client.secrets.kv.v2.read_secret_version(path=secret_path, mount_point=mount or "secret")
+    resp = client.secrets.kv.v2.read_secret_version(
+        path=secret_path, mount_point=mount or "secret"
+    )
     return resp["data"]["data"][secret_path.rsplit("/", 1)[-1]]
 
 
@@ -142,7 +148,9 @@ def _gcp_sm_backend(path: str) -> str:
     try:
         from google.cloud import secretmanager  # type: ignore
     except ImportError as e:  # pragma: no cover
-        raise RuntimeError("GCP Secret Manager backend requires `google-cloud-secret-manager`.") from e
+        raise RuntimeError(
+            "GCP Secret Manager backend requires `google-cloud-secret-manager`."
+        ) from e
     client = secretmanager.SecretManagerServiceClient()
     resp = client.access_secret_version(name=f"{path}/versions/latest")
     return resp.payload.data.decode("utf-8")

@@ -21,7 +21,6 @@ from __future__ import annotations
 import threading
 from typing import Any, Optional
 
-
 # ---------- prometheus_client backend (preferred) ----------
 
 
@@ -83,14 +82,20 @@ class _CounterChild:
 
     def inc(self, amount: float = 1.0) -> None:
         with self._parent._lock:
-            self._parent._data[self._key] = self._parent._data.get(self._key, 0.0) + amount
+            self._parent._data[self._key] = (
+                self._parent._data.get(self._key, 0.0) + amount
+            )
 
 
 class _Histogram(_Metric):
     __slots__ = ("buckets",)
 
     def __init__(
-        self, name: str, doc: str, label_names: list[str], buckets: list[float],
+        self,
+        name: str,
+        doc: str,
+        label_names: list[str],
+        buckets: list[float],
     ) -> None:
         super().__init__(name, doc, label_names)
         self.buckets = sorted(buckets) + [float("inf")]
@@ -107,7 +112,9 @@ class _Histogram(_Metric):
 
     def _observe(self, key: tuple, value: float) -> None:
         with self._lock:
-            entry = self._data.setdefault(key, {"count": 0, "sum": 0.0, "buckets": [0] * len(self.buckets)})
+            entry = self._data.setdefault(
+                key, {"count": 0, "sum": 0.0, "buckets": [0] * len(self.buckets)}
+            )
             entry["count"] += 1
             entry["sum"] += value
             for i, ub in enumerate(self.buckets):
@@ -158,7 +165,9 @@ class _GaugeChild:
 
     def inc(self, amount: float = 1.0) -> None:
         with self._parent._lock:
-            self._parent._data[self._key] = self._parent._data.get(self._key, 0.0) + amount
+            self._parent._data[self._key] = (
+                self._parent._data.get(self._key, 0.0) + amount
+            )
 
 
 # ---------- registry ----------
@@ -175,7 +184,9 @@ def _register(m: Any) -> Any:
 # ---------- factory functions (the surface the plugin compiles to) ----------
 
 
-def make_counter(name: str, *, labels: Optional[list[str]] = None, doc: str = "") -> Any:
+def make_counter(
+    name: str, *, labels: Optional[list[str]] = None, doc: str = ""
+) -> Any:
     if _PC is not None:
         m = _PC.Counter(name, doc, labels or [])
     else:
@@ -192,7 +203,12 @@ def make_histogram(
 ) -> Any:
     default_buckets = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
     if _PC is not None:
-        m = _PC.Histogram(name, doc, labelnames=labels or [], buckets=tuple(buckets or default_buckets))
+        m = _PC.Histogram(
+            name,
+            doc,
+            labelnames=labels or [],
+            buckets=tuple(buckets or default_buckets),
+        )
     else:
         m = _Histogram(name, doc, labels or [], buckets or default_buckets)
     return _register(m)
@@ -222,19 +238,31 @@ def metrics_text() -> str:
     out: list[str] = []
     for m in _REGISTRY:
         kind = (
-            "counter" if isinstance(m, _Counter) else
-            "histogram" if isinstance(m, _Histogram) else
-            "gauge" if isinstance(m, _Gauge) else "untyped"
+            "counter"
+            if isinstance(m, _Counter)
+            else (
+                "histogram"
+                if isinstance(m, _Histogram)
+                else "gauge" if isinstance(m, _Gauge) else "untyped"
+            )
         )
         if m.doc:
             out.append(f"# HELP {m.name} {m.doc}")
         out.append(f"# TYPE {m.name} {kind}")
         if isinstance(m, _Histogram):
             for key, entry in m._data.items():
-                lstr = "{" + ",".join(f'{n}="{v}"' for n, v in zip(m.label_names, key)) + "}" if m.label_names else ""
+                lstr = (
+                    "{"
+                    + ",".join(f'{n}="{v}"' for n, v in zip(m.label_names, key))
+                    + "}"
+                    if m.label_names
+                    else ""
+                )
                 for ub, c in zip(m.buckets, entry["buckets"]):
                     if m.label_names:
-                        out.append(f"{m.name}_bucket{{{lstr.strip('{}')}{',' if lstr.strip('{}') else ''}le=\"{ub}\"}} {c}")
+                        out.append(
+                            f"{m.name}_bucket{{{lstr.strip('{}')}{',' if lstr.strip('{}') else ''}le=\"{ub}\"}} {c}"
+                        )
                     else:
                         out.append(f'{m.name}_bucket{{le="{ub}"}} {c}')
                 out.append(f"{m.name}_sum{lstr} {entry['sum']}")
@@ -242,7 +270,11 @@ def metrics_text() -> str:
         else:
             for key, value in m._data.items():
                 if m.label_names:
-                    lstr = "{" + ",".join(f'{n}="{v}"' for n, v in zip(m.label_names, key)) + "}"
+                    lstr = (
+                        "{"
+                        + ",".join(f'{n}="{v}"' for n, v in zip(m.label_names, key))
+                        + "}"
+                    )
                 else:
                     lstr = ""
                 out.append(f"{m.name}{lstr} {value}")
@@ -250,6 +282,9 @@ def metrics_text() -> str:
 
 
 __all__ = [
-    "make_counter", "make_histogram", "make_gauge",
-    "metrics_text", "reset_registry",
+    "make_counter",
+    "make_histogram",
+    "make_gauge",
+    "metrics_text",
+    "reset_registry",
 ]

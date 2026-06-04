@@ -109,7 +109,7 @@ class _C4Finder(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname: str, path, target=None):
         if not fullname.startswith(_PREFIX):
             return None
-        rel = fullname[len(_PREFIX):]
+        rel = fullname[len(_PREFIX) :]
         c4_path = _STDLIB_DIR / (rel + ".c4")
         if not c4_path.exists():
             return None

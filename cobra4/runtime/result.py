@@ -24,7 +24,6 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Generic, TypeVar
 
-
 T = TypeVar("T")
 E = TypeVar("E")
 

@@ -31,7 +31,6 @@ from typing import Any, Callable, Iterable
 from cobra4.runtime import core as core_rt
 from cobra4.runtime import observe
 
-
 # ---------- In-memory queue (for tests / simple cases) ----------
 
 
@@ -169,7 +168,9 @@ class SQSQueue:
                 yield json.loads(m["Body"])
             except (json.JSONDecodeError, ValueError):
                 yield m["Body"]
-            self._client.delete_message(QueueUrl=self.url, ReceiptHandle=m["ReceiptHandle"])
+            self._client.delete_message(
+                QueueUrl=self.url, ReceiptHandle=m["ReceiptHandle"]
+            )
 
     def close(self) -> None:
         pass
@@ -228,6 +229,7 @@ def queue(name: str, *, kind: str | None = None, **kwargs) -> QueueLike:
     Caches by name so repeated calls return the same instance.
     """
     from cobra4.runtime.effects import check as _check_effect
+
     _check_effect("time")
     if name in _queues:
         return _queues[name]
@@ -297,9 +299,17 @@ def _encode_response(result: Any) -> tuple[int, dict[str, str], bytes]:
     headers: dict[str, str] = {}
 
     if isinstance(result, tuple):
-        if len(result) == 3 and isinstance(result[0], int) and isinstance(result[1], dict):
+        if (
+            len(result) == 3
+            and isinstance(result[0], int)
+            and isinstance(result[1], dict)
+        ):
             status, headers, payload = result
-            body = payload.encode("utf-8") if isinstance(payload, str) else (payload or b"")
+            body = (
+                payload.encode("utf-8")
+                if isinstance(payload, str)
+                else (payload or b"")
+            )
         elif len(result) == 2 and isinstance(result[0], int):
             status, payload = result
             return _encode_response(payload)[:1] + (_encode_response(payload)[1], _encode_response(payload)[2])  # type: ignore[index]
@@ -350,15 +360,24 @@ class _HandlerAdapter(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(payload)
         except Exception as e:  # noqa: BLE001
-            err = json.dumps({"error": str(e), "type": type(e).__name__}).encode("utf-8")
+            err = json.dumps({"error": str(e), "type": type(e).__name__}).encode(
+                "utf-8"
+            )
             self.send_response(500)
             self.send_header("content-type", "application/json")
             self.send_header("content-length", str(len(err)))
             self.end_headers()
             self.wfile.write(err)
 
-    def log_message(self, format: str, *args: Any) -> None:  # quiet down BaseHTTPRequestHandler
-        observe.log("http", method=self.command, path=self.path, status=args[1] if len(args) > 1 else "?")
+    def log_message(
+        self, format: str, *args: Any
+    ) -> None:  # quiet down BaseHTTPRequestHandler
+        observe.log(
+            "http",
+            method=self.command,
+            path=self.path,
+            status=args[1] if len(args) > 1 else "?",
+        )
 
     do_GET = _serve
     do_POST = _serve
@@ -428,11 +447,15 @@ def _start_http_servers(state: _DaemonState) -> None:
         port = entry.port
         handler = entry.handler
         cls = type(
-            f"_C4Handler_{port}", (_HandlerAdapter,), {"handler_fn": staticmethod(handler)}
+            f"_C4Handler_{port}",
+            (_HandlerAdapter,),
+            {"handler_fn": staticmethod(handler)},
         )
         server = ThreadingHTTPServer((bind_addr, port), cls)
         state.servers.append(server)
-        t = threading.Thread(target=server.serve_forever, name=f"c4-http-{port}", daemon=True)
+        t = threading.Thread(
+            target=server.serve_forever, name=f"c4-http-{port}", daemon=True
+        )
         t.start()
         state.threads.append(t)
         observe.log("serve.bound", host=bind_addr, port=port)
@@ -446,11 +469,15 @@ def serve_forever(timeout: float | None = None) -> None:
     state = _DaemonState()
 
     if core_rt.schedule_registry():
-        t = threading.Thread(target=_scheduler_loop, args=(state,), name="c4-scheduler", daemon=True)
+        t = threading.Thread(
+            target=_scheduler_loop, args=(state,), name="c4-scheduler", daemon=True
+        )
         t.start()
         state.threads.append(t)
     if core_rt.event_registry():
-        t = threading.Thread(target=_event_loop, args=(state,), name="c4-events", daemon=True)
+        t = threading.Thread(
+            target=_event_loop, args=(state,), name="c4-events", daemon=True
+        )
         t.start()
         state.threads.append(t)
     _start_http_servers(state)

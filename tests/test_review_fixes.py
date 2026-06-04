@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -71,7 +70,9 @@ def test_review_2_safe_attr_returns_none_for_missing_attr():
     """getattr fallback also returns None instead of raising."""
     from cobra4.runtime.core import safe_attr
 
-    class O: pass
+    class O:
+        pass
+
     assert safe_attr(O(), "nope") is None
 
 
@@ -96,7 +97,7 @@ def test_review_3_fmt_preserves_lang_use_directive():
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / "x.c4"
         src.write_text(
-            'lang use sql\n\nx = sql {\n    SELECT 1\n}\n',
+            "lang use sql\n\nx = sql {\n    SELECT 1\n}\n",
             encoding="utf-8",
         )
         p = _run_cli("fmt", str(src), cwd=d)
@@ -113,7 +114,10 @@ def test_review_4_check_does_not_warn_on_plugin_builtins():
     """`sql_run` is injected by the sql plugin — check shouldn't flag it."""
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / "x.c4"
-        src.write_text('lang use sql\n\nrows = sql { SELECT 1 }\nprint(len(rows))\n', encoding="utf-8")
+        src.write_text(
+            "lang use sql\n\nrows = sql { SELECT 1 }\nprint(len(rows))\n",
+            encoding="utf-8",
+        )
         p = _run_cli("check", str(src), cwd=d)
         assert p.returncode == 0, p.stderr
         # Must not flag sql_run as undefined
@@ -129,10 +133,7 @@ def test_review_5_dispatch_analysis_flags_subset_overlap():
     from cobra4.parser import parse
     from cobra4.dispatch_analysis import analyze
 
-    src = (
-        'read.register(h_general)\n'
-        'read.register(h_specific, scheme="file")\n'
-    )
+    src = "read.register(h_general)\n" 'read.register(h_specific, scheme="file")\n'
     diags = analyze(parse(src))
     assert any("specificity overlap" in d.message for d in diags)
 
@@ -142,7 +143,7 @@ def test_review_5_dispatch_analysis_flags_priority_with_when():
     from cobra4.parser import parse
     from cobra4.dispatch_analysis import analyze
 
-    src = 'read.register(h, when=p)\n'
+    src = "read.register(h, when=p)\n"
     diags = analyze(parse(src))
     assert any("disables the dispatch cache" in d.message for d in diags)
 
@@ -205,7 +206,7 @@ def test_review_7_paramiko_strict_by_default():
     # The branch order means RejectPolicy is the default.
     assert "RejectPolicy" in src
     assert "AutoAddPolicy" in src  # still available via opt-in
-    assert 'host_key_policy' in src  # per-host override exists
+    assert "host_key_policy" in src  # per-host override exists
     assert "COBRA4_SSH_HOST_KEY_POLICY" in src  # env override exists
 
 
@@ -288,7 +289,10 @@ def test_review_12_stdlib_import_hook_caches():
     cobra4.stdlib.clear_cache()
     # First import compiles + caches.
     import cobra4.stdlib.json as cj  # noqa: F401
-    cache_files = list((cobra4.stdlib._STDLIB_DIR / "__pycache__").glob("json.cobra4.pyc"))
+
+    cache_files = list(
+        (cobra4.stdlib._STDLIB_DIR / "__pycache__").glob("json.cobra4.pyc")
+    )
     assert cache_files, "first import should have written a .cobra4.pyc"
 
     # Drop the module from sys.modules so re-import goes through the loader.
@@ -296,10 +300,14 @@ def test_review_12_stdlib_import_hook_caches():
 
     # Patch the parser to fail loudly: if the cache is honored, parse won't run.
     import cobra4.parser as parser
+
     orig_parse = parser.parse
-    parser.parse = lambda *a, **k: (_ for _ in ()).throw(AssertionError("re-parsed despite cache"))
+    parser.parse = lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("re-parsed despite cache")
+    )
     try:
         import cobra4.stdlib.json as cj_again  # should hit the cache
+
         assert cj_again.dumps({"x": 1}) == '{"x": 1}'
     finally:
         parser.parse = orig_parse
@@ -321,6 +329,8 @@ def test_review_13_dispatch_trace_when_env_set():
     ) % str(PROJECT_ROOT)
     env = os.environ.copy()
     env["COBRA4_TRACE_DISPATCH"] = "1"
-    proc = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+    proc = subprocess.run(
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True
+    )
     assert proc.returncode == 0, proc.stderr
     assert "[c4-trace] f(" in proc.stderr

@@ -20,7 +20,6 @@ from cobra4.runtime.io import read, save
 from cobra4.runtime.concurrency import parallel_for
 from cobra4.runtime import observe
 
-
 # ---------- SmartFn ----------
 
 
@@ -72,7 +71,9 @@ def test_smart_caches_resolution_when_no_custom():
     calls = {"n": 0}
 
     class _Counter:
-        def __init__(self): pass
+        def __init__(self):
+            pass
+
         def __call__(self, x):
             calls["n"] += 1
             return ("str", x)
@@ -80,8 +81,12 @@ def test_smart_caches_resolution_when_no_custom():
     h = _Counter()
     # Register without `when=` so caching kicks in.
     f.register(h, type=str)
-    f("x"); f("y"); f("z")
-    assert calls["n"] == 3  # handler still runs every call (cache caches resolution, not result)
+    f("x")
+    f("y")
+    f("z")
+    assert (
+        calls["n"] == 3
+    )  # handler still runs every call (cache caches resolution, not result)
 
 
 def test_smart_custom_predicate_runs_on_every_dispatch():
@@ -93,8 +98,16 @@ def test_smart_custom_predicate_runs_on_every_dispatch():
     """
     f = make_smart("f")
     seen_a, seen_b = [], []
-    f.register(lambda v: ("A", v), type=str, when=lambda v: (seen_a.append(v) or v.startswith("a")))
-    f.register(lambda v: ("B", v), type=str, when=lambda v: (seen_b.append(v) or v.startswith("b")))
+    f.register(
+        lambda v: ("A", v),
+        type=str,
+        when=lambda v: (seen_a.append(v) or v.startswith("a")),
+    )
+    f.register(
+        lambda v: ("B", v),
+        type=str,
+        when=lambda v: (seen_b.append(v) or v.startswith("b")),
+    )
 
     assert f("alpha") == ("A", "alpha")
     assert f("beta") == ("B", "beta")
@@ -171,9 +184,13 @@ def test_save_http_json_uses_put(monkeypatch):
         return Response()
 
     import requests
+
     monkeypatch.setattr(requests, "put", fake_put)
 
-    assert save({"x": 1}, "https://example.test/out.json", timeout=5) == "https://example.test/out.json"
+    assert (
+        save({"x": 1}, "https://example.test/out.json", timeout=5)
+        == "https://example.test/out.json"
+    )
 
     url, data, headers, timeout = calls[0]
     assert url == "https://example.test/out.json"
@@ -189,12 +206,16 @@ def test_user_can_extend_read():
         with open(p, "w", encoding="utf-8") as fh:
             fh.write("custom-format-payload")
         # Register an ad-hoc handler
-        read.register(lambda t, **_: f"<<{open(t).read()}>>", type=str, scheme="file", ext="fake")
+        read.register(
+            lambda t, **_: f"<<{open(t).read()}>>", type=str, scheme="file", ext="fake"
+        )
         try:
             assert read(p) == "<<custom-format-payload>>"
         finally:
             # Cleanup so other tests don't see this handler
-            read._handlers = [h for h in read._handlers if h.name != None and h.pred.ext != "fake"]
+            read._handlers = [
+                h for h in read._handlers if h.name != None and h.pred.ext != "fake"
+            ]
             read._cache.clear()
 
 

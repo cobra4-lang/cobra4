@@ -44,7 +44,6 @@ from typing import Any, Optional
 
 from cobra4.runtime.infra import Action, register_adapter, InfraError
 
-
 # ---------- client factory (real boto3 or mock) ----------
 
 
@@ -92,12 +91,19 @@ class _MockS3:
         self.calls.append(("head_bucket", Bucket))
         if Bucket not in self.buckets:
             from botocore.exceptions import ClientError  # type: ignore
+
             raise ClientError({"Error": {"Code": "404"}}, "HeadBucket")
         return {}
 
-    def create_bucket(self, *, Bucket: str, CreateBucketConfiguration=None, **_) -> dict:
+    def create_bucket(
+        self, *, Bucket: str, CreateBucketConfiguration=None, **_
+    ) -> dict:
         self.calls.append(("create_bucket", Bucket))
-        self.buckets[Bucket] = {"region": (CreateBucketConfiguration or {}).get("LocationConstraint", "us-east-1")}
+        self.buckets[Bucket] = {
+            "region": (CreateBucketConfiguration or {}).get(
+                "LocationConstraint", "us-east-1"
+            )
+        }
         return {"Location": f"http://{Bucket}.mock"}
 
     def put_bucket_tagging(self, *, Bucket: str, Tagging: dict) -> dict:
@@ -121,7 +127,10 @@ class _MockLambda:
         self.calls.append(("get_function", FunctionName))
         if FunctionName not in self.functions:
             from botocore.exceptions import ClientError  # type: ignore
-            raise ClientError({"Error": {"Code": "ResourceNotFoundException"}}, "GetFunction")
+
+            raise ClientError(
+                {"Error": {"Code": "ResourceNotFoundException"}}, "GetFunction"
+            )
         return {"Configuration": dict(self.functions[FunctionName])}
 
     def create_function(self, **kw) -> dict:
@@ -136,14 +145,18 @@ class _MockLambda:
         }
         return {"FunctionArn": f"arn:aws:lambda:mock::function:{kw['FunctionName']}"}
 
-    def update_function_code(self, *, FunctionName: str, ZipFile: bytes = b"", **_) -> dict:
+    def update_function_code(
+        self, *, FunctionName: str, ZipFile: bytes = b"", **_
+    ) -> dict:
         self.calls.append(("update_function_code", FunctionName))
         return {}
 
     def update_function_configuration(self, **kw) -> dict:
         self.calls.append(("update_function_configuration", kw["FunctionName"]))
         if kw["FunctionName"] in self.functions:
-            self.functions[kw["FunctionName"]].update({k: v for k, v in kw.items() if k != "FunctionName"})
+            self.functions[kw["FunctionName"]].update(
+                {k: v for k, v in kw.items() if k != "FunctionName"}
+            )
         return {}
 
     def delete_function(self, *, FunctionName: str) -> dict:
@@ -197,7 +210,9 @@ class S3Adapter:
         if tags:
             s3.put_bucket_tagging(
                 Bucket=name,
-                Tagging={"TagSet": [{"Key": k, "Value": str(v)} for k, v in tags.items()]},
+                Tagging={
+                    "TagSet": [{"Key": k, "Value": str(v)} for k, v in tags.items()]
+                },
             )
 
         return {"name": name, "region": region, "tags": tags}
@@ -314,7 +329,10 @@ class _MockRDS:
         self.calls.append(("describe", DBInstanceIdentifier))
         if DBInstanceIdentifier not in self.instances:
             from botocore.exceptions import ClientError  # type: ignore
-            raise ClientError({"Error": {"Code": "DBInstanceNotFound"}}, "DescribeDBInstances")
+
+            raise ClientError(
+                {"Error": {"Code": "DBInstanceNotFound"}}, "DescribeDBInstances"
+            )
         return {"DBInstances": [dict(self.instances[DBInstanceIdentifier])]}
 
     def create_db_instance(self, **kw) -> dict:
@@ -344,6 +362,7 @@ class _MockIAM:
         self.calls.append(("get_role", RoleName))
         if RoleName not in self.roles:
             from botocore.exceptions import ClientError  # type: ignore
+
             raise ClientError({"Error": {"Code": "NoSuchEntity"}}, "GetRole")
         return {"Role": dict(self.roles[RoleName])}
 
@@ -355,7 +374,9 @@ class _MockIAM:
     def update_assume_role_policy(self, **kw) -> dict:
         self.calls.append(("update_assume_role_policy", kw["RoleName"]))
         if kw["RoleName"] in self.roles:
-            self.roles[kw["RoleName"]]["AssumeRolePolicyDocument"] = kw["PolicyDocument"]
+            self.roles[kw["RoleName"]]["AssumeRolePolicyDocument"] = kw[
+                "PolicyDocument"
+            ]
         return {}
 
     def attach_role_policy(self, *, RoleName: str, PolicyArn: str) -> dict:
@@ -382,6 +403,7 @@ class _MockIAM:
 
 # Allow injecting RDS / IAM mocks. Test clients tuple is
 # (s3, lambda, rds, iam) — older code only uses the first two.
+
 
 def set_test_rds_iam_clients(rds: Any, iam: Any) -> None:
     """Inject RDS + IAM mock clients alongside the existing s3/lambda."""
@@ -422,7 +444,13 @@ class RDSAdapter:
         name = desired.get("name")
         if not name:
             raise InfraError("aws.rds: required field 'name' is missing")
-        for f in ("engine", "instance_class", "allocated_storage", "master_username", "master_password"):
+        for f in (
+            "engine",
+            "instance_class",
+            "allocated_storage",
+            "master_username",
+            "master_password",
+        ):
             if not desired.get(f):
                 raise InfraError(f"aws.rds {name!r}: required field {f!r} is missing")
         if not current:
@@ -458,10 +486,18 @@ class RDSAdapter:
             exists = False
 
         if exists:
-            mod_params = {k: v for k, v in params.items() if k in (
-                "DBInstanceIdentifier", "DBInstanceClass", "AllocatedStorage",
-                "MasterUserPassword", "PubliclyAccessible",
-            )}
+            mod_params = {
+                k: v
+                for k, v in params.items()
+                if k
+                in (
+                    "DBInstanceIdentifier",
+                    "DBInstanceClass",
+                    "AllocatedStorage",
+                    "MasterUserPassword",
+                    "PubliclyAccessible",
+                )
+            }
             mod_params["ApplyImmediately"] = True
             rds.modify_db_instance(**mod_params)
         else:
@@ -480,7 +516,9 @@ class RDSAdapter:
         name = current.get("name")
         if name:
             try:
-                rds.delete_db_instance(DBInstanceIdentifier=name, SkipFinalSnapshot=True)
+                rds.delete_db_instance(
+                    DBInstanceIdentifier=name, SkipFinalSnapshot=True
+                )
             except Exception:  # pragma: no cover
                 pass
 
@@ -508,13 +546,17 @@ class IAMRoleAdapter:
                 desired.get("assume_role_policy"),
             )
         if set(current.get("policies", [])) != set(desired.get("policies", [])):
-            diff["policies"] = (current.get("policies", []), desired.get("policies", []))
+            diff["policies"] = (
+                current.get("policies", []),
+                desired.get("policies", []),
+            )
         if not diff:
             return Action(kind="noop", notes=f"iam role {name} matches state")
         return Action(kind="update", diff=diff, notes=f"update iam role {name}")
 
     def apply(self, current: dict, desired: dict) -> dict:
         import json as _json
+
         iam = _make_iam_client()
         name = desired["name"]
         policy_doc = _json.dumps(desired["assume_role_policy"])
@@ -558,7 +600,15 @@ register_adapter("aws.iam", IAMRoleAdapter())
 
 
 __all__ = [
-    "S3Adapter", "LambdaAdapter", "RDSAdapter", "IAMRoleAdapter",
-    "set_test_clients", "set_test_rds_iam_clients", "reset_test_clients",
-    "_MockS3", "_MockLambda", "_MockRDS", "_MockIAM",
+    "S3Adapter",
+    "LambdaAdapter",
+    "RDSAdapter",
+    "IAMRoleAdapter",
+    "set_test_clients",
+    "set_test_rds_iam_clients",
+    "reset_test_clients",
+    "_MockS3",
+    "_MockLambda",
+    "_MockRDS",
+    "_MockIAM",
 ]

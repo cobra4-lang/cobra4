@@ -31,7 +31,6 @@ import types
 from pathlib import Path
 from typing import Optional
 
-
 _MAGIC = b"C4MOD\x00\x01\x02"
 _HEADER_FMT = f"<{len(_MAGIC)}sQQ"
 
@@ -92,7 +91,8 @@ def _compile_c4(path: Path) -> object:
     if pre.plugins:
         plugin_imports = "\n".join(
             f"from {p.runtime_module} import *  # plugin: {p.name}"
-            for p in pre.plugins if p.runtime_module
+            for p in pre.plugins
+            if p.runtime_module
         )
         if plugin_imports:
             py_src = plugin_imports + "\n" + py_src

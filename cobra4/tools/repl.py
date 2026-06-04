@@ -20,7 +20,6 @@ from cobra4.parser import parse, ParseError
 from cobra4.lowering import lower
 from cobra4.codegen import generate
 
-
 _RUNTIME_BOOT = textwrap.dedent("""
     from cobra4.runtime import (
         safe_attr as _c4_safe_attr,
@@ -60,7 +59,7 @@ def _is_incomplete(err: ParseError, buf: str) -> bool:
                 in_string = None
             i += 1
             continue
-        if c in ("\"", "'"):
+        if c in ('"', "'"):
             in_string = c
             i += 1
             continue
@@ -94,6 +93,7 @@ def run_repl(stream_in=None, stream_out=None) -> int:
     history_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         import readline  # noqa: F401  (real or pyreadline3)
+
         try:
             readline.read_history_file(str(history_file))
         except (FileNotFoundError, OSError):
@@ -104,13 +104,51 @@ def run_repl(stream_in=None, stream_out=None) -> int:
             from cobra4.resolver import _PY_BUILTINS, _C4_BUILTINS
 
             keywords = [
-                "if ", "elif ", "else ", "while ", "for ", "each ", "in ", "and ",
-                "or ", "not ", "True", "False", "None", "fn ", "class ", "data ",
-                "return ", "raise ", "break", "continue", "pass", "match ", "case ",
-                "try ", "catch ", "finally ", "use ", "as ", "where ", "every ",
-                "on ", "from ", "to ", "with ", "parallel", "serve ", "deploy ", "lang ",
+                "if ",
+                "elif ",
+                "else ",
+                "while ",
+                "for ",
+                "each ",
+                "in ",
+                "and ",
+                "or ",
+                "not ",
+                "True",
+                "False",
+                "None",
+                "fn ",
+                "class ",
+                "data ",
+                "return ",
+                "raise ",
+                "break",
+                "continue",
+                "pass",
+                "match ",
+                "case ",
+                "try ",
+                "catch ",
+                "finally ",
+                "use ",
+                "as ",
+                "where ",
+                "every ",
+                "on ",
+                "from ",
+                "to ",
+                "with ",
+                "parallel",
+                "serve ",
+                "deploy ",
+                "lang ",
             ]
-            candidates = list(_PY_BUILTINS) + list(_C4_BUILTINS) + keywords + list(locals_.keys())
+            candidates = (
+                list(_PY_BUILTINS)
+                + list(_C4_BUILTINS)
+                + keywords
+                + list(locals_.keys())
+            )
             matches = [c for c in candidates if c.startswith(text)]
             try:
                 return matches[state]

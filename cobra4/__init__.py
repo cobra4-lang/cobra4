@@ -7,4 +7,5 @@ __version__ = "0.5.0"
 #     use mypkg.utils        # → mypkg/utils.c4
 # without relying on transpile-then-import workflows.
 from cobra4 import import_hook as _c4_import_hook
+
 _c4_import_hook.install()

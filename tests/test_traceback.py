@@ -26,13 +26,16 @@ def _run_c4(tmp_path: Path, src: str, *, verbose: bool = False) -> tuple[int, st
         env.pop("COBRA4_TRACE_VERBOSE", None)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(f)],
-        capture_output=True, text=True, cwd=tmp_path, env=env,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=env,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
 
 def test_traceback_shows_c4_file_path(tmp_path: Path) -> None:
-    src = "fn boom() { raise ValueError(\"no\") }\nboom()\n"
+    src = 'fn boom() { raise ValueError("no") }\nboom()\n'
     code, _, stderr = _run_c4(tmp_path, src)
     assert code != 0
     assert "prog.c4" in stderr
@@ -43,10 +46,7 @@ def test_traceback_shows_c4_file_path(tmp_path: Path) -> None:
 def test_traceback_shows_c4_source_line(tmp_path: Path) -> None:
     """The frame body should print what the user wrote in cobra4, not
     the transpiled Python (e.g. `return a / b` not `return (a / b)`)."""
-    src = (
-        "fn divide(a, b) { return a / b }\n"
-        "divide(1, 0)\n"
-    )
+    src = "fn divide(a, b) { return a / b }\n" "divide(1, 0)\n"
     code, _, stderr = _run_c4(tmp_path, src)
     assert code != 0
     # Cobra4 form (no parens) must appear.
@@ -58,7 +58,7 @@ def test_traceback_filters_runpy_and_cli_frames(tmp_path: Path) -> None:
     check via the literal frame-header substrings the rewrite filters
     out (the bare path test is fragile because pytest's tmp_path may
     contain 'runpy' as part of the test name)."""
-    src = "fn boom() { raise IOError(\"x\") }\nboom()\n"
+    src = 'fn boom() { raise IOError("x") }\nboom()\n'
     code, _, stderr = _run_c4(tmp_path, src)
     assert "<frozen runpy>" not in stderr
     assert "cobra4/cli.py" not in stderr
@@ -66,7 +66,7 @@ def test_traceback_filters_runpy_and_cli_frames(tmp_path: Path) -> None:
 
 def test_traceback_verbose_keeps_internal_frames(tmp_path: Path) -> None:
     """COBRA4_TRACE_VERBOSE=1 disables the filtering for debugging."""
-    src = "fn boom() { raise IOError(\"x\") }\nboom()\n"
+    src = 'fn boom() { raise IOError("x") }\nboom()\n'
     code, _, stderr = _run_c4(tmp_path, src, verbose=True)
     assert code != 0
     assert "runpy" in stderr or "cli.py" in stderr
@@ -78,7 +78,7 @@ def test_traceback_shows_full_call_chain(tmp_path: Path) -> None:
     src = (
         "fn a() { b() }\n"
         "fn b() { c() }\n"
-        "fn c() { raise ValueError(\"deep\") }\n"
+        'fn c() { raise ValueError("deep") }\n'
         "a()\n"
     )
     code, _, stderr = _run_c4(tmp_path, src)
@@ -92,7 +92,7 @@ def test_traceback_shows_full_call_chain(tmp_path: Path) -> None:
 def test_traceback_handles_uncaught_async_exception(tmp_path: Path) -> None:
     src = (
         "use asyncio\n"
-        "async fn fail() { raise IOError(\"async-boom\") }\n"
+        'async fn fail() { raise IOError("async-boom") }\n'
         "asyncio.run(fail())\n"
     )
     code, _, stderr = _run_c4(tmp_path, src)
@@ -106,7 +106,7 @@ def test_traceback_handles_workflow_task_failure(tmp_path: Path) -> None:
     traceback must still point at the user's task definition, not at
     the workflow runner internals."""
     src = (
-        "fn always_fails() { raise IOError(\"task-boom\") }\n"
+        'fn always_fails() { raise IOError("task-boom") }\n'
         "workflow w { x = task always_fails() }\n"
     )
     code, _, stderr = _run_c4(tmp_path, src)

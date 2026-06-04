@@ -65,7 +65,9 @@ class BenchResult:
         }
 
 
-def time_budget(name: str, fn: Callable[[], None], *, seconds: float = 1.0) -> BenchResult:
+def time_budget(
+    name: str, fn: Callable[[], None], *, seconds: float = 1.0
+) -> BenchResult:
     """Run ``fn`` repeatedly for at most ``seconds``. Records per-op
     timings until budget is spent (capped at 10k iterations to keep
     ``samples`` from blowing up RAM)."""
@@ -87,13 +89,14 @@ def time_budget(name: str, fn: Callable[[], None], *, seconds: float = 1.0) -> B
 
 def _bench_parser() -> Callable[[], None]:
     from cobra4.parser import parse
+
     src = (
         "fn fizzbuzz(n) {\n"
         "    out = []\n"
         "    for i in range(1, n + 1) {\n"
-        "        if i % 15 == 0 { out.append(\"FizzBuzz\") }\n"
-        "        elif i % 3 == 0 { out.append(\"Fizz\") }\n"
-        "        elif i % 5 == 0 { out.append(\"Buzz\") }\n"
+        '        if i % 15 == 0 { out.append("FizzBuzz") }\n'
+        '        elif i % 3 == 0 { out.append("Fizz") }\n'
+        '        elif i % 5 == 0 { out.append("Buzz") }\n'
         "        else { out.append(str(i)) }\n"
         "    }\n"
         "    return out\n"
@@ -102,17 +105,20 @@ def _bench_parser() -> Callable[[], None]:
 
     def run():
         parse(src, source_path="<bench>")
+
     return run
 
 
 def _bench_codegen() -> Callable[[], None]:
     from cobra4.parser import parse
     from cobra4.codegen import generate
+
     src = "fn add(a, b) = a + b\nfn main() { return add(1, 2) }\n"
     module = parse(src)
 
     def run():
         generate(module)
+
     return run
 
 
@@ -126,6 +132,7 @@ def _bench_smart_dispatch() -> Callable[[], None]:
 
     def run():
         sf("./x.json")
+
     return run
 
 
@@ -142,6 +149,7 @@ def _bench_workflow_startup() -> Callable[[], None]:
             wf.add(name, lambda v: v + 1, deps=(prev,))
             prev = name
         wf.run()
+
     return run
 
 
@@ -155,14 +163,15 @@ def _bench_async_parallel() -> Callable[[], None]:
 
     def run():
         asyncio.run(async_parallel_for(range(100), double, workers=20))
+
     return run
 
 
 _TARGETS: dict[str, Callable[[], Callable[[], None]]] = {
-    "parser":         _bench_parser,
-    "codegen":        _bench_codegen,
+    "parser": _bench_parser,
+    "codegen": _bench_codegen,
     "smart-dispatch": _bench_smart_dispatch,
-    "workflow":       _bench_workflow_startup,
+    "workflow": _bench_workflow_startup,
     "async-parallel": _bench_async_parallel,
 }
 
@@ -179,7 +188,10 @@ def run_benchmarks(
     if names:
         unknown = set(names) - set(_TARGETS)
         if unknown:
-            print(f"warning: unknown benchmark target(s): {sorted(unknown)}", file=sys.stderr)
+            print(
+                f"warning: unknown benchmark target(s): {sorted(unknown)}",
+                file=sys.stderr,
+            )
             print(f"available: {sorted(_TARGETS)}", file=sys.stderr)
     out: list[BenchResult] = []
     for name in targets:
@@ -195,7 +207,8 @@ def format_table(results: list[BenchResult]) -> str:
     cols = ["target", "iters", "ops/s", "mean µs", "p50 µs", "p95 µs"]
     rows = [
         [
-            r.name, str(r.iterations),
+            r.name,
+            str(r.iterations),
             f"{r.ops_per_sec:,.0f}",
             f"{r.mean_us:.1f}",
             f"{r.p50_us:.1f}",
@@ -219,12 +232,14 @@ def format_compare(current: list[BenchResult], baseline: list[dict]) -> str:
         base_ops = float(b.get("ops_per_sec", 0))
         now_ops = r.ops_per_sec
         delta = ((now_ops - base_ops) / base_ops * 100) if base_ops else 0.0
-        rows.append([
-            r.name,
-            f"{now_ops:,.0f}",
-            f"{base_ops:,.0f}",
-            f"{delta:+.1f}",
-        ])
+        rows.append(
+            [
+                r.name,
+                f"{now_ops:,.0f}",
+                f"{base_ops:,.0f}",
+                f"{delta:+.1f}",
+            ]
+        )
     widths = [max(len(c), *(len(r[i]) for r in rows)) for i, c in enumerate(cols)]
     sep = "  ".join("-" * w for w in widths)
     header = "  ".join(c.ljust(w) for c, w in zip(cols, widths))
@@ -235,8 +250,13 @@ def format_compare(current: list[BenchResult], baseline: list[dict]) -> str:
 # ---------- CLI handler ----------
 
 
-def cli_main(targets: list[str], *, seconds: float, json_path: str | None,
-             compare_path: str | None) -> int:
+def cli_main(
+    targets: list[str],
+    *,
+    seconds: float,
+    json_path: str | None,
+    compare_path: str | None,
+) -> int:
     results = run_benchmarks(targets if targets else None, seconds=seconds)
 
     if compare_path:
@@ -253,5 +273,9 @@ def cli_main(targets: list[str], *, seconds: float, json_path: str | None,
 
 
 __all__ = [
-    "BenchResult", "run_benchmarks", "format_table", "format_compare", "cli_main",
+    "BenchResult",
+    "run_benchmarks",
+    "format_table",
+    "format_compare",
+    "cli_main",
 ]

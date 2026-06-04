@@ -22,7 +22,6 @@ import re
 
 from cobra4.plugins.api import LanguagePlugin, register_plugin
 
-
 # Match the opening of `sql { ... }`. Body matching is done with a
 # brace-aware scanner (below) so SQL strings containing `{` (JSON
 # predicates, format placeholders) don't terminate the block early.
@@ -136,7 +135,9 @@ def configure(url: str | None = None, **kwargs) -> object:
     return _default_engine
 
 
-def sql_run(query: str, *, params: dict | None = None, conn: object | None = None) -> list[dict]:
+def sql_run(
+    query: str, *, params: dict | None = None, conn: object | None = None
+) -> list[dict]:
     """Execute a SQL query against the default engine (or ``conn``) and
     return rows as ``list[dict]``.
 
@@ -152,10 +153,16 @@ def sql_run(query: str, *, params: dict | None = None, conn: object | None = Non
     if conn is None and _default_engine is None:
         # Auto-configure from env if available, else log-only fallback.
         import os
+
         if os.environ.get("COBRA4_SQL_URL"):
             configure()
         else:
-            log("sql.run", query=query, conn="<unconfigured>", note="call sql.configure() to execute")
+            log(
+                "sql.run",
+                query=query,
+                conn="<unconfigured>",
+                note="call sql.configure() to execute",
+            )
             return []
 
     try:

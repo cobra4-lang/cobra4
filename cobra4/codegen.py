@@ -28,7 +28,6 @@ from typing import Optional
 from cobra4 import ast_nodes as N
 from cobra4.source_map import SourceMap
 
-
 # Names of runtime helpers injected at module top.
 _RUNTIME_IMPORT = (
     "from cobra4.runtime import (\n"
@@ -260,7 +259,9 @@ def _emit_each_stmt(em: _Emitter, s: N.Each, line: int) -> None:
         opts = _args_to_kw(s.parallel_args)
         body_fn = _block_to_lambda(s.body, params=[s.var])
         if s.where is not None:
-            iterable = f"[{s.var} for {s.var} in {_expr(s.iterable)} if {_expr(s.where)}]"
+            iterable = (
+                f"[{s.var} for {s.var} in {_expr(s.iterable)} if {_expr(s.where)}]"
+            )
         else:
             iterable = _expr(s.iterable)
         if _in_async():
@@ -786,9 +787,13 @@ def _each_expr_to_str(e: N.EachExpr) -> str:
     # sequential each as expression: build list-comprehension when body is a
     # single expression; else a helper.
     if len(body) == 1 and isinstance(body[0], N.ExprStmt):
-        return f"[{_expr(body[0].value)} for {e.var} in {_expr(e.iterable)}{where_clause}]"
+        return (
+            f"[{_expr(body[0].value)} for {e.var} in {_expr(e.iterable)}{where_clause}]"
+        )
     if len(body) == 1 and isinstance(body[0], N.Return):
-        return f"[{_expr(body[0].value)} for {e.var} in {_expr(e.iterable)}{where_clause}]"
+        return (
+            f"[{_expr(body[0].value)} for {e.var} in {_expr(e.iterable)}{where_clause}]"
+        )
     # Fallback: parallel_for with workers=1 to preserve order using a runtime
     # helper that supports this.
     body_fn = _block_to_lambda(body, params=[e.var])

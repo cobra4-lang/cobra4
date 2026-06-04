@@ -28,6 +28,7 @@ class GraphQLDocument:
     ``ast`` is a ``graphql.language.DocumentNode`` when graphql-core is
     installed; otherwise it's ``None`` and ``text`` carries the SDL.
     """
+
     text: str
     ast: Optional[Any] = None
 
@@ -41,6 +42,7 @@ class GraphQLDocument:
 def _try_import_graphql_core():
     try:
         from graphql import parse as gql_parse  # type: ignore
+
         return gql_parse
     except ImportError:
         return None

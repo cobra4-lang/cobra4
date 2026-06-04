@@ -7,7 +7,6 @@ from cobra4.resolver import resolve
 from cobra4.typecheck import check as typecheck
 from cobra4.dispatch_analysis import analyze as dispatch_analyze
 
-
 # ---------- Resolver ----------
 
 
@@ -57,25 +56,25 @@ def test_type_check_passes_consistent_program():
 
 
 def test_type_check_warns_on_arg_mismatch():
-    src = 'fn upper(s: str) -> str = s\nupper(42)\n'
+    src = "fn upper(s: str) -> str = s\nupper(42)\n"
     diags = typecheck(parse(src))
     assert any("declared str, got int" in d.message for d in diags)
 
 
 def test_type_check_warns_on_return_mismatch():
-    src = 'fn s() -> str = 1\n'
+    src = "fn s() -> str = 1\n"
     diags = typecheck(parse(src))
     assert any("returns int, declared str" in d.message for d in diags)
 
 
 def test_type_check_int_float_compat():
-    src = 'fn f(x: float) -> float = x\nf(1)\n'
+    src = "fn f(x: float) -> float = x\nf(1)\n"
     diags = typecheck(parse(src))
     assert not diags
 
 
 def test_type_check_kwarg_mismatch():
-    src = 'fn f(name: str) = name\nf(name=7)\n'
+    src = "fn f(name: str) = name\nf(name=7)\n"
     diags = typecheck(parse(src))
     assert any("declared str, got int" in d.message for d in diags)
 
@@ -84,27 +83,27 @@ def test_type_check_kwarg_mismatch():
 
 
 def test_dispatch_analysis_flags_duplicate_keys():
-    src = '''
+    src = """
 read.register(handler1, scheme="file", ext="yml")
 read.register(handler2, scheme="file", ext="yml")
-'''
+"""
     diags = dispatch_analyze(parse(src))
     assert any("AmbiguousDispatch" in d.message for d in diags)
 
 
 def test_dispatch_analysis_silent_when_keys_differ():
-    src = '''
+    src = """
 read.register(handler1, scheme="file", ext="yml")
 read.register(handler2, scheme="file", ext="toml")
-'''
+"""
     diags = dispatch_analyze(parse(src))
     assert not diags
 
 
 def test_dispatch_analysis_distinct_priorities_silent():
-    src = '''
+    src = """
 read.register(handler1, scheme="file", ext="yml", priority=1)
 read.register(handler2, scheme="file", ext="yml", priority=2)
-'''
+"""
     diags = dispatch_analyze(parse(src))
     assert not diags

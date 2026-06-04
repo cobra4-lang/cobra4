@@ -94,7 +94,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     # Write generated module to a temp file so tracebacks can point to a
     # real location; we still rewrite frames via source_map for clarity.
     with tempfile.NamedTemporaryFile(
-        suffix=".py", prefix=f"{path.stem}__c4_", mode="w", encoding="utf-8", delete=False
+        suffix=".py",
+        prefix=f"{path.stem}__c4_",
+        mode="w",
+        encoding="utf-8",
+        delete=False,
     ) as tmp:
         tmp.write(code)
         tmp_path = tmp.name
@@ -141,6 +145,7 @@ def _print_traceback_with_source_map(py_path: str, smap, c4_path: str) -> None:
        default; only shown in verbose mode for debugging the compiler.
     """
     import os as _os
+
     verbose = _os.environ.get("COBRA4_TRACE_VERBOSE") == "1"
 
     # Read the cobra4 source once so we can show the actual c4 line text.
@@ -174,7 +179,9 @@ def _print_traceback_with_source_map(py_path: str, smap, c4_path: str) -> None:
         # next frame header (or the final exception line).
         if not verbose and _is_internal_frame_header(ln):
             i += 1
-            while i < len(raw) and not _is_frame_header(raw[i]) and raw[i].startswith(" "):
+            while (
+                i < len(raw) and not _is_frame_header(raw[i]) and raw[i].startswith(" ")
+            ):
                 i += 1
             continue
 
@@ -189,7 +196,8 @@ def _print_traceback_with_source_map(py_path: str, smap, c4_path: str) -> None:
                     pos = f"{c4_line}" if c4_col == 0 else f"{c4_line}:{c4_col}"
                     suffix = (
                         f" (transpiled from {Path(py_path).name}:{py_line})"
-                        if verbose else ""
+                        if verbose
+                        else ""
                     )
                     new_ln = f'  File "{c4_path}", line {pos}'
                     if tail:
@@ -201,7 +209,11 @@ def _print_traceback_with_source_map(py_path: str, smap, c4_path: str) -> None:
                     if 0 < c4_line <= len(c4_lines):
                         out.append("    " + c4_lines[c4_line - 1].strip())
                     i += 1
-                    while i < len(raw) and not _is_frame_header(raw[i]) and raw[i].startswith(" "):
+                    while (
+                        i < len(raw)
+                        and not _is_frame_header(raw[i])
+                        and raw[i].startswith(" ")
+                    ):
                         i += 1
                     continue
             except Exception:
@@ -234,7 +246,12 @@ def cmd_fmt(args: argparse.Namespace) -> int:
     seen_body = False
     for line in src.splitlines(keepends=True):
         stripped = line.strip()
-        if not seen_body and (stripped.startswith("lang use ") or not stripped or stripped.startswith("#") or stripped.startswith("//")):
+        if not seen_body and (
+            stripped.startswith("lang use ")
+            or not stripped
+            or stripped.startswith("#")
+            or stripped.startswith("//")
+        ):
             if stripped.startswith("lang use "):
                 directives.append(stripped)
             elif not stripped:
@@ -301,7 +318,9 @@ def cmd_check(args: argparse.Namespace) -> int:
         sys.stderr.write(f"{d}\n")
 
     if errors:
-        sys.stderr.write(f"{path}: {len(errors)} error(s), {len(warnings)} warning(s)\n")
+        sys.stderr.write(
+            f"{path}: {len(errors)} error(s), {len(warnings)} warning(s)\n"
+        )
         return 2
     if warnings and args.strict:
         sys.stderr.write(f"{path}: {len(warnings)} warning(s) (strict mode)\n")
@@ -330,7 +349,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
     path = Path(args.file)
     code, smap = _compile_file(path)
     with tempfile.NamedTemporaryFile(
-        suffix=".py", prefix=f"{path.stem}__c4serve_", mode="w", encoding="utf-8", delete=False
+        suffix=".py",
+        prefix=f"{path.stem}__c4serve_",
+        mode="w",
+        encoding="utf-8",
+        delete=False,
     ) as tmp:
         tmp.write(code)
         tmp_path = tmp.name
@@ -416,8 +439,13 @@ def cmd_deps(args: argparse.Namespace) -> int:
             return 0
         pkgs = []
         for name, ver in deps.items():
-            pkgs.append(name if ver in ("*", "") else f"{name}{ver if ver[0] in '<>=!~' else '=='+ver}")
+            pkgs.append(
+                name
+                if ver in ("*", "")
+                else f"{name}{ver if ver[0] in '<>=!~' else '=='+ver}"
+            )
         import subprocess as _sp
+
         py_exe = sys.executable
         if args.venv:
             venv_path = Path(args.venv if args.venv != "auto" else "./.cobra4/venv")
@@ -425,7 +453,9 @@ def cmd_deps(args: argparse.Namespace) -> int:
                 sys.stdout.write(f"creating venv at {venv_path}\n")
                 _sp.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
             scripts = "Scripts" if os.name == "nt" else "bin"
-            py_exe = str(venv_path / scripts / ("python.exe" if os.name == "nt" else "python"))
+            py_exe = str(
+                venv_path / scripts / ("python.exe" if os.name == "nt" else "python")
+            )
         cmd = [py_exe, "-m", "pip", "install", *pkgs]
         sys.stdout.write("$ " + " ".join(cmd) + "\n")
         return _sp.call(cmd)
@@ -466,7 +496,11 @@ def cmd_doc(args: argparse.Namespace) -> int:
             if doc:
                 out.append(doc + "\n")
         elif isinstance(s, N.ClassDecl):
-            sup = "(" + ", ".join(_type_doc(t) for t in s.supers) + ")" if s.supers else ""
+            sup = (
+                "(" + ", ".join(_type_doc(t) for t in s.supers) + ")"
+                if s.supers
+                else ""
+            )
             out.append(f"## `class {s.name}{sup}`\n")
             doc = _extract_docstring(s.body)
             if doc:
@@ -492,6 +526,7 @@ def _param_doc(p) -> str:
         s += f": {_type_doc(p.type_ref)}"
     if p.default is not None:
         from cobra4.tools.fmt import _expr as _fmt_expr
+
         s += f" = {_fmt_expr(p.default)}"
     return s
 
@@ -546,7 +581,12 @@ def cmd_plugin(args: argparse.Namespace) -> int:
             sys.stderr.write("usage: c4 plugin add NAME\n")
             return 2
         import subprocess as _sp
-        target = args.name if "://" in args.name or args.name.startswith("git+") else f"cobra4-lang-{args.name}"
+
+        target = (
+            args.name
+            if "://" in args.name or args.name.startswith("git+")
+            else f"cobra4-lang-{args.name}"
+        )
         cmd = [sys.executable, "-m", "pip", "install", target]
         sys.stdout.write("$ " + " ".join(cmd) + "\n")
         return _sp.call(cmd)
@@ -555,7 +595,12 @@ def cmd_plugin(args: argparse.Namespace) -> int:
             sys.stderr.write("usage: c4 plugin remove NAME\n")
             return 2
         import subprocess as _sp
-        target = args.name if args.name.startswith("cobra4-lang-") else f"cobra4-lang-{args.name}"
+
+        target = (
+            args.name
+            if args.name.startswith("cobra4-lang-")
+            else f"cobra4-lang-{args.name}"
+        )
         cmd = [sys.executable, "-m", "pip", "uninstall", "-y", target]
         sys.stdout.write("$ " + " ".join(cmd) + "\n")
         return _sp.call(cmd)
@@ -569,9 +614,12 @@ def cmd_bench(args: argparse.Namespace) -> int:
     ``c4 bench --json baseline.json``, then on each PR
     ``c4 bench --compare baseline.json``."""
     from cobra4.tools.bench import cli_main
+
     return cli_main(
-        args.targets, seconds=args.seconds,
-        json_path=args.json_out, compare_path=args.compare,
+        args.targets,
+        seconds=args.seconds,
+        json_path=args.json_out,
+        compare_path=args.compare,
     )
 
 
@@ -587,12 +635,18 @@ def cmd_init(args: argparse.Namespace) -> int:
         return 0
 
     if not args.name:
-        print("error: missing project name. Usage: c4 init NAME [--template TYPE]", file=sys.stderr)
+        print(
+            "error: missing project name. Usage: c4 init NAME [--template TYPE]",
+            file=sys.stderr,
+        )
         return 1
 
     target = Path(args.name)
     if target.exists() and not args.force:
-        print(f"error: {target}/ already exists. Use --force to overwrite.", file=sys.stderr)
+        print(
+            f"error: {target}/ already exists. Use --force to overwrite.",
+            file=sys.stderr,
+        )
         return 1
 
     try:
@@ -630,7 +684,11 @@ def cmd_infra(args: argparse.Namespace) -> int:
     path = Path(args.file)
     code, smap = _compile_file(path)
     with tempfile.NamedTemporaryFile(
-        suffix=".py", prefix=f"{path.stem}__c4infra_", mode="w", encoding="utf-8", delete=False
+        suffix=".py",
+        prefix=f"{path.stem}__c4infra_",
+        mode="w",
+        encoding="utf-8",
+        delete=False,
     ) as tmp:
         tmp.write(code)
         tmp_path = tmp.name
@@ -725,6 +783,7 @@ def cmd_run_watch(args: argparse.Namespace) -> int:
                 last_mtimes = cur
                 # reset registries between runs for isolation
                 from cobra4.runtime.core import reset_registries
+
                 reset_registries()
                 try:
                     cmd_run(argparse.Namespace(file=str(path)))
@@ -760,7 +819,11 @@ def cmd_doc_html(module, output_path: Path) -> None:
             if doc:
                 parts.append(f"<p class='doc'>{_html_escape(doc)}</p>")
         elif isinstance(s, N.ClassDecl):
-            sup = "(" + ", ".join(_type_doc(t) for t in s.supers) + ")" if s.supers else ""
+            sup = (
+                "(" + ", ".join(_type_doc(t) for t in s.supers) + ")"
+                if s.supers
+                else ""
+            )
             parts.append(f"<h2><code>class {s.name}{sup}</code></h2>")
             doc = _extract_docstring(s.body)
             if doc:
@@ -782,7 +845,9 @@ def _html_escape(s: str) -> str:
 
 def cmd_unimplemented(name: str):
     def _inner(_args: argparse.Namespace) -> int:
-        sys.stderr.write(f"`c4 {name}` is not implemented yet (planned for a later milestone).\n")
+        sys.stderr.write(
+            f"`c4 {name}` is not implemented yet (planned for a later milestone).\n"
+        )
         return 64
 
     return _inner
@@ -793,7 +858,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     run_program_args: list[str] = []
     if argv and argv[0] == "run" and "--" in argv:
         sep = argv.index("--")
-        run_program_args = argv[sep + 1:]
+        run_program_args = argv[sep + 1 :]
         argv = argv[:sep]
 
     p = argparse.ArgumentParser(prog="c4", description="cobra4 CLI")
@@ -814,8 +879,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p_build = sub.add_parser("build", help="Transpile to Python without running")
     p_build.add_argument("file")
-    p_build.add_argument("-o", "--output", default="-", help="Output path or '-' for stdout")
-    p_build.add_argument("--source-map", action="store_true", help="Write .pymap alongside output")
+    p_build.add_argument(
+        "-o", "--output", default="-", help="Output path or '-' for stdout"
+    )
+    p_build.add_argument(
+        "--source-map", action="store_true", help="Write .pymap alongside output"
+    )
     p_build.set_defaults(handler=cmd_build)
 
     p_fmt = sub.add_parser("fmt", help="Format / validate a .c4 file")
@@ -825,20 +894,34 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p_check = sub.add_parser("check", help="Lint / validate a .c4 file (no execution)")
     p_check.add_argument("file")
-    p_check.add_argument("--strict", action="store_true", help="Treat warnings as errors")
-    p_check.add_argument("--no-undefined", action="store_true", help="Disable undefined-name warnings")
-    p_check.add_argument("--no-shadowing", action="store_true", help="Disable shadowing warnings")
-    p_check.add_argument("--no-types", action="store_true", help="Disable gradual type checking")
-    p_check.add_argument("--no-dispatch", action="store_true", help="Disable dispatcher overlap analysis")
+    p_check.add_argument(
+        "--strict", action="store_true", help="Treat warnings as errors"
+    )
+    p_check.add_argument(
+        "--no-undefined", action="store_true", help="Disable undefined-name warnings"
+    )
+    p_check.add_argument(
+        "--no-shadowing", action="store_true", help="Disable shadowing warnings"
+    )
+    p_check.add_argument(
+        "--no-types", action="store_true", help="Disable gradual type checking"
+    )
+    p_check.add_argument(
+        "--no-dispatch", action="store_true", help="Disable dispatcher overlap analysis"
+    )
     p_check.set_defaults(handler=cmd_check)
 
     p_repl = sub.add_parser("repl", help="Interactive REPL")
     p_repl.set_defaults(handler=cmd_repl)
 
     p_lsp = sub.add_parser("lsp", help="Run the cobra4 language server on stdio")
-    p_lsp.set_defaults(handler=lambda _a: __import__("cobra4.tools.lsp", fromlist=["run"]).run())
+    p_lsp.set_defaults(
+        handler=lambda _a: __import__("cobra4.tools.lsp", fromlist=["run"]).run()
+    )
 
-    p_serve = sub.add_parser("serve", help="Run .c4 file as a daemon (every/on event/serve)")
+    p_serve = sub.add_parser(
+        "serve", help="Run .c4 file as a daemon (every/on event/serve)"
+    )
     p_serve.add_argument("file")
     p_serve.add_argument(
         "--timeout",
@@ -849,39 +932,70 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_serve.set_defaults(handler=cmd_serve)
 
     p_bench = sub.add_parser("bench", help="Run cobra4's built-in benchmarks")
-    p_bench.add_argument("targets", nargs="*",
-                         help="Subset to run (parser, codegen, smart-dispatch, workflow, async-parallel). Empty = all.")
-    p_bench.add_argument("--seconds", type=float, default=1.0,
-                         help="Wall-time budget per target (default 1.0)")
-    p_bench.add_argument("--json", dest="json_out",
-                         help="Write per-target results to a JSON file")
-    p_bench.add_argument("--compare", dest="compare",
-                         help="Compare against a previously-saved JSON file")
+    p_bench.add_argument(
+        "targets",
+        nargs="*",
+        help="Subset to run (parser, codegen, smart-dispatch, workflow, async-parallel). Empty = all.",
+    )
+    p_bench.add_argument(
+        "--seconds",
+        type=float,
+        default=1.0,
+        help="Wall-time budget per target (default 1.0)",
+    )
+    p_bench.add_argument(
+        "--json", dest="json_out", help="Write per-target results to a JSON file"
+    )
+    p_bench.add_argument(
+        "--compare", dest="compare", help="Compare against a previously-saved JSON file"
+    )
     p_bench.set_defaults(handler=cmd_bench)
 
-    p_init = sub.add_parser("init", help="Scaffold a new cobra4 project from a template")
-    p_init.add_argument("name", nargs="?", help="Project directory name (must not exist)")
-    p_init.add_argument("--template", "-t", default="http-service",
-                        help="Template: http-service | etl-pipeline | agent | daemon (default: http-service)")
-    p_init.add_argument("--list", action="store_true", dest="list_templates",
-                        help="List available templates and exit")
-    p_init.add_argument("--force", action="store_true",
-                        help="Allow writing into an existing directory")
+    p_init = sub.add_parser(
+        "init", help="Scaffold a new cobra4 project from a template"
+    )
+    p_init.add_argument(
+        "name", nargs="?", help="Project directory name (must not exist)"
+    )
+    p_init.add_argument(
+        "--template",
+        "-t",
+        default="http-service",
+        help="Template: http-service | etl-pipeline | agent | daemon (default: http-service)",
+    )
+    p_init.add_argument(
+        "--list",
+        action="store_true",
+        dest="list_templates",
+        help="List available templates and exit",
+    )
+    p_init.add_argument(
+        "--force", action="store_true", help="Allow writing into an existing directory"
+    )
     p_init.set_defaults(handler=cmd_init)
 
-    p_infra = sub.add_parser("infra", help="Declarative infrastructure (resource declarations)")
+    p_infra = sub.add_parser(
+        "infra", help="Declarative infrastructure (resource declarations)"
+    )
     p_infra.add_argument("action", choices=["plan", "apply", "destroy"])
     p_infra.add_argument("file", help="cobra4 file containing `resource` blocks")
-    p_infra.add_argument("--state-file", default=None,
-                         help="Override state-file path (default: ./.cobra4/state.json)")
+    p_infra.add_argument(
+        "--state-file",
+        default=None,
+        help="Override state-file path (default: ./.cobra4/state.json)",
+    )
     p_infra.set_defaults(handler=cmd_infra)
 
     p_plugin = sub.add_parser("plugin", help="Manage language plugins")
-    p_plugin.add_argument("action", choices=["list", "add", "remove"], default="list", nargs="?")
+    p_plugin.add_argument(
+        "action", choices=["list", "add", "remove"], default="list", nargs="?"
+    )
     p_plugin.add_argument("name", nargs="?", help="Plugin name (for add/remove)")
     p_plugin.set_defaults(handler=cmd_plugin)
 
-    p_deps = sub.add_parser("deps", help="Manage runtime dependencies (cobra4.toml [deps])")
+    p_deps = sub.add_parser(
+        "deps", help="Manage runtime dependencies (cobra4.toml [deps])"
+    )
     p_deps.add_argument("action", choices=["list", "add", "remove", "install"])
     p_deps.add_argument("name", nargs="?", help="Dependency name (for add/remove)")
     p_deps.add_argument("--version", help="Pinned version (for add)")
@@ -890,14 +1004,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         nargs="?",
         const="auto",
         help="Install into a project-local venv (default: ./.cobra4/venv). "
-             "Pass an explicit path to override.",
+        "Pass an explicit path to override.",
     )
     p_deps.set_defaults(handler=cmd_deps)
 
     p_doc = sub.add_parser("doc", help="Extract docstrings + signatures to markdown")
     p_doc.add_argument("file")
     p_doc.add_argument("-o", "--output", help="Output file (default: stdout)")
-    p_doc.add_argument("--html", action="store_true", help="Output a standalone HTML page")
+    p_doc.add_argument(
+        "--html", action="store_true", help="Output a standalone HTML page"
+    )
     p_doc.set_defaults(handler=cmd_doc)
 
     args = p.parse_args(argv)

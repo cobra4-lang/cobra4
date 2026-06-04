@@ -26,11 +26,12 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
-
 _TRACE_ENABLED = os.environ.get("COBRA4_TRACE_DISPATCH") in ("1", "true", "yes")
 
 
-def _trace_dispatch(fn_name: str, handler: Optional["Handler"], target: Any, kind: str) -> None:
+def _trace_dispatch(
+    fn_name: str, handler: Optional["Handler"], target: Any, kind: str
+) -> None:
     """Print a dispatch decision when ``COBRA4_TRACE_DISPATCH=1``.
 
     Lets users see which handler answered for which input — useful for
@@ -131,8 +132,11 @@ def _scheme_and_ext(s: str) -> tuple[Optional[str], Optional[str]]:
         return "file", _ext_of_path(s)
     # Local relative/absolute paths without a scheme → file.
     if scheme is None and (
-        s.startswith("./") or s.startswith("../") or s.startswith("/")
-        or s.startswith("\\") or _looks_like_local_path(s)
+        s.startswith("./")
+        or s.startswith("../")
+        or s.startswith("/")
+        or s.startswith("\\")
+        or _looks_like_local_path(s)
     ):
         scheme = "file"
     path = parsed.path or s
@@ -239,11 +243,14 @@ class SmartFn:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if self.required_effect is not None:
             from cobra4.runtime.effects import check as _check_effect
+
             _check_effect(self.required_effect)
         if not args:
             if self.default is not None:
                 return self.default(*args, **kwargs)
-            raise NoHandler(f"smart fn '{self.name}' requires at least one positional arg")
+            raise NoHandler(
+                f"smart fn '{self.name}' requires at least one positional arg"
+            )
         target = args[0]
         # If ANY registered handler has a custom predicate, the cache is
         # unsafe (two values with the same (type, scheme, ext, mime) key

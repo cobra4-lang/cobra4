@@ -34,25 +34,25 @@ def test_list_literal_mixed_int_float_joins_to_float() -> None:
 
 
 def test_list_literal_heterogeneous_collapses_to_any() -> None:
-    tc, _ = _check("xs = [1, \"hi\"]\n")
+    tc, _ = _check('xs = [1, "hi"]\n')
     assert tc.var_types["xs"].args == (ANY_T,)
 
 
 def test_dict_literal_homogeneous_inferred() -> None:
-    tc, _ = _check("d = {\"a\": 1, \"b\": 2}\n")
+    tc, _ = _check('d = {"a": 1, "b": 2}\n')
     assert tc.var_types["d"].name == "dict"
     assert tc.var_types["d"].args == (STR_T, INT_T)
 
 
 def test_dict_with_spread_falls_back_to_opaque() -> None:
-    src = "extra = {\"a\": 1}\nd = {\"x\": 2, **extra}\n"
+    src = 'extra = {"a": 1}\nd = {"x": 2, **extra}\n'
     tc, _ = _check(src)
     assert tc.var_types["d"].name == "dict"
     assert tc.var_types["d"].args == ()  # opaque
 
 
 def test_tuple_literal_keeps_positional_types() -> None:
-    tc, _ = _check("t = (1, \"hi\", True)\n")
+    tc, _ = _check('t = (1, "hi", True)\n')
     assert tc.var_types["t"].name == "tuple"
     assert len(tc.var_types["t"].args) == 3
     assert tc.var_types["t"].args[0].name == "int"
@@ -69,7 +69,7 @@ def test_set_literal_homogeneous_inferred() -> None:
 
 
 def test_generic_param_default_mismatch_warns() -> None:
-    src = "fn handle(xs: list[int] = [\"a\", \"b\"]) -> int = 0\n"
+    src = 'fn handle(xs: list[int] = ["a", "b"]) -> int = 0\n'
     _, diags = _check(src)
     assert any(d.code == "T003" and "list[str]" in d.message for d in diags), diags
 
@@ -81,21 +81,13 @@ def test_generic_param_default_match_silent() -> None:
 
 
 def test_generic_param_call_argument_warns() -> None:
-    src = (
-        "fn handle(xs: list[int]) -> int = 0\n"
-        "ys = [\"a\", \"b\"]\n"
-        "handle(ys)\n"
-    )
+    src = "fn handle(xs: list[int]) -> int = 0\n" 'ys = ["a", "b"]\n' "handle(ys)\n"
     _, diags = _check(src)
     assert any(d.code == "T005" and "list[str]" in d.message for d in diags), diags
 
 
 def test_generic_param_call_argument_match_silent() -> None:
-    src = (
-        "fn handle(xs: list[int]) -> int = 0\n"
-        "ys = [1, 2, 3]\n"
-        "handle(ys)\n"
-    )
+    src = "fn handle(xs: list[int]) -> int = 0\n" "ys = [1, 2, 3]\n" "handle(ys)\n"
     _, diags = _check(src)
     assert not any(d.code == "T005" for d in diags), diags
 

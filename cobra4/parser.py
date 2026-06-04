@@ -16,7 +16,6 @@ from lark.exceptions import UnexpectedInput
 from cobra4 import ast_nodes as N
 from cobra4.lexer import get_parser
 
-
 # ---------- Errors ----------
 
 
@@ -72,7 +71,9 @@ class _Transformer(Transformer):
         if isinstance(tail, _AssignTail):
             if tail.kind == "eq":
                 return N.Assign(targets=[head], value=tail.value, loc=_loc(meta))
-            return N.AugAssign(target=head, op=tail.op, value=tail.value, loc=_loc(meta))
+            return N.AugAssign(
+                target=head, op=tail.op, value=tail.value, loc=_loc(meta)
+            )
         return head  # shouldn't happen
 
     def assign_tail_eq(self, meta, children):
@@ -127,8 +128,11 @@ class _Transformer(Transformer):
             idx += 1
         body = children[idx]
         return N.For(
-            var=str(name_tok), iterable=expr, where=where,
-            body=body.statements, loc=_loc(meta),
+            var=str(name_tok),
+            iterable=expr,
+            where=where,
+            body=body.statements,
+            loc=_loc(meta),
         )
 
     def each_where(self, meta, children):
@@ -232,7 +236,9 @@ class _Transformer(Transformer):
                 catches.append(c)
             elif isinstance(c, _Finally):
                 finally_body = c.body
-        return N.Try(body=body, catches=catches, finally_body=finally_body, loc=_loc(meta))
+        return N.Try(
+            body=body, catches=catches, finally_body=finally_body, loc=_loc(meta)
+        )
 
     def catch_clause(self, meta, children):
         exc = children[0]
@@ -316,7 +322,8 @@ class _Transformer(Transformer):
         ):
             is_async = True
             idx += 1
-        name_tok = children[idx]; idx += 1
+        name_tok = children[idx]
+        idx += 1
         params: list[N.Param] = []
         return_type: Optional[N.TypeRef] = None
         body: Optional[N.Expr] = None
@@ -402,7 +409,9 @@ class _Transformer(Transformer):
                 type_ref = c
             elif isinstance(c, N.Expr):
                 default = c
-        return N.Param(name=str(name_tok), type_ref=type_ref, default=default, loc=_loc(meta))
+        return N.Param(
+            name=str(name_tok), type_ref=type_ref, default=default, loc=_loc(meta)
+        )
 
     def param_star(self, meta, children):
         return N.Param(name=str(children[0]), star=True, loc=_loc(meta))
@@ -430,7 +439,9 @@ class _Transformer(Transformer):
                 supers = c.types
             elif isinstance(c, N.Stmt):
                 body_items.append(c)
-        return N.ClassDecl(name=str(name_tok), supers=supers, body=body_items, loc=_loc(meta))
+        return N.ClassDecl(
+            name=str(name_tok), supers=supers, body=body_items, loc=_loc(meta)
+        )
 
     def class_super(self, meta, children):
         return _ClassSuper(types=list(children))
@@ -472,7 +483,9 @@ class _Transformer(Transformer):
 
     def data_sum_decl(self, meta, children):
         name = str(children[0])
-        variants: list[N.DataVariant] = [c for c in children[1:] if isinstance(c, N.DataVariant)]
+        variants: list[N.DataVariant] = [
+            c for c in children[1:] if isinstance(c, N.DataVariant)
+        ]
         return N.DataSumDecl(name=name, variants=variants, loc=_loc(meta))
 
     # ---------- workflow ----------
@@ -480,7 +493,9 @@ class _Transformer(Transformer):
     def workflow_decl(self, meta, children):
         # children: [WORKFLOW_KW token, NAME, *task_assigns]
         name = str(children[1])
-        tasks: list[N.TaskAssign] = [c for c in children[2:] if isinstance(c, N.TaskAssign)]
+        tasks: list[N.TaskAssign] = [
+            c for c in children[2:] if isinstance(c, N.TaskAssign)
+        ]
         return N.WorkflowDecl(name=name, tasks=tasks, loc=_loc(meta))
 
     def task_assign(self, meta, children):
@@ -508,8 +523,10 @@ class _Transformer(Transformer):
             elif isinstance(c, _ResourceField):
                 fields_list.append((c.name, c.value))
         return N.ResourceDecl(
-            name=name, adapter_path=adapter_path,
-            fields=fields_list, loc=_loc(meta),
+            name=name,
+            adapter_path=adapter_path,
+            fields=fields_list,
+            loc=_loc(meta),
         )
 
     def resource_adapter(self, meta, children):
@@ -523,11 +540,15 @@ class _Transformer(Transformer):
     def pat_num(self, meta, children):
         n = float(children[0])
         is_int = n.is_integer() and "." not in str(children[0])
-        return N.PatLiteral(value=N.Num(value=n, is_int=is_int, loc=_loc(meta)), loc=_loc(meta))
+        return N.PatLiteral(
+            value=N.Num(value=n, is_int=is_int, loc=_loc(meta)), loc=_loc(meta)
+        )
 
     def pat_str(self, meta, children):
         s = _strip_string(str(children[0]))
-        return N.PatLiteral(value=N.Str(value=s.value, is_raw=s.is_raw, loc=_loc(meta)), loc=_loc(meta))
+        return N.PatLiteral(
+            value=N.Str(value=s.value, is_raw=s.is_raw, loc=_loc(meta)), loc=_loc(meta)
+        )
 
     def pat_true(self, meta, _):
         return N.PatLiteral(value=N.Bool(value=True, loc=_loc(meta)), loc=_loc(meta))
@@ -545,7 +566,9 @@ class _Transformer(Transformer):
         return N.PatName(name=str(children[0]), loc=_loc(meta))
 
     def pat_call(self, meta, children):
-        return N.PatCall(name=str(children[0]), items=list(children[1:]), loc=_loc(meta))
+        return N.PatCall(
+            name=str(children[0]), items=list(children[1:]), loc=_loc(meta)
+        )
 
     def pat_list(self, meta, children):
         return N.PatList(items=list(children), loc=_loc(meta))
@@ -623,16 +646,35 @@ class _Transformer(Transformer):
         return N.Compare(left=left, ops=ops, comparators=comparators, loc=_loc(meta))
 
     # comparison operators return a string
-    def eq(self, meta, _): return "=="
-    def ne(self, meta, _): return "!="
-    def lt(self, meta, _): return "<"
-    def gt(self, meta, _): return ">"
-    def le(self, meta, _): return "<="
-    def ge(self, meta, _): return ">="
-    def is_op(self, meta, _): return "is"
-    def is_not_op(self, meta, _): return "is not"
-    def in_op(self, meta, _): return "in"
-    def not_in_op(self, meta, _): return "not in"
+    def eq(self, meta, _):
+        return "=="
+
+    def ne(self, meta, _):
+        return "!="
+
+    def lt(self, meta, _):
+        return "<"
+
+    def gt(self, meta, _):
+        return ">"
+
+    def le(self, meta, _):
+        return "<="
+
+    def ge(self, meta, _):
+        return ">="
+
+    def is_op(self, meta, _):
+        return "is"
+
+    def is_not_op(self, meta, _):
+        return "is not"
+
+    def in_op(self, meta, _):
+        return "in"
+
+    def not_in_op(self, meta, _):
+        return "not in"
 
     def nullish(self, meta, children):
         if len(children) == 1:
@@ -756,7 +798,9 @@ class _Transformer(Transformer):
     def string_lit(self, meta, children):
         s = _strip_string(str(children[0]))
         has_interp = (not s.is_raw) and _has_interpolation(s.value)
-        return N.Str(value=s.value, is_raw=s.is_raw, has_interp=has_interp, loc=_loc(meta))
+        return N.Str(
+            value=s.value, is_raw=s.is_raw, has_interp=has_interp, loc=_loc(meta)
+        )
 
     def true_lit(self, meta, _):
         return N.Bool(value=True, loc=_loc(meta))
@@ -841,7 +885,11 @@ class _Transformer(Transformer):
         else:
             body = last.expr
         return N.Lambda(
-            params=params, return_type=return_type, body=body, block=block, loc=_loc(meta)
+            params=params,
+            return_type=return_type,
+            body=body,
+            block=block,
+            loc=_loc(meta),
         )
 
     def lambda_block_body(self, meta, children):
@@ -984,7 +1032,7 @@ def _strip_string(raw: str) -> _StringValue:
             .replace("\\t", "\t")
             .replace("\\r", "\r")
             .replace("\\\\", "\\")
-            .replace("\\\"", "\"")
+            .replace('\\"', '"')
             .replace("\\'", "'")
         )
     return _StringValue(value=body, is_raw=is_raw)
@@ -1028,7 +1076,11 @@ def parse(source: str, source_path: Optional[str] = None) -> N.Module:
     except UnexpectedInput as e:
         line = getattr(e, "line", 0) or 0
         col = getattr(e, "column", 0) or 0
-        snippet_line = source.splitlines()[line - 1] if 0 < line <= len(source.splitlines()) else ""
+        snippet_line = (
+            source.splitlines()[line - 1]
+            if 0 < line <= len(source.splitlines())
+            else ""
+        )
         msg = _format_lark_error(e)
         hint = _hint_for_error(e, snippet_line)
         raise ParseError(

@@ -38,11 +38,11 @@ def test_register_and_load_custom_plugin():
 
 
 def test_sql_plugin_rewrites_block():
-    src = '''lang use sql
+    src = """lang use sql
 rows = sql {
     SELECT id, name FROM users WHERE age > 18
 }
-'''
+"""
     res = preprocess(src)
     assert "sql_run(" in res.source
     assert "SELECT id, name FROM users" in res.source

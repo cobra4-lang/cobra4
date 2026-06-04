@@ -75,8 +75,12 @@ class Workflow:
                     f"(deps must be declared earlier in the workflow body)"
                 )
         node = _TaskNode(
-            name=name, fn=fn, deps=tuple(deps),
-            retries=retries, timeout=timeout, on_failure=on_failure,
+            name=name,
+            fn=fn,
+            deps=tuple(deps),
+            retries=retries,
+            timeout=timeout,
+            on_failure=on_failure,
         )
         self._tasks[name] = node
         self._order.append(name)
@@ -125,7 +129,10 @@ class Workflow:
         return results
 
     def _run_one(
-        self, node: _TaskNode, args: tuple, results: dict[str, Any],
+        self,
+        node: _TaskNode,
+        args: tuple,
+        results: dict[str, Any],
     ) -> None:
         attempts_left = node.retries + 1
         last_exc: Optional[BaseException] = None
@@ -173,6 +180,7 @@ def _run_with_timeout(fn: Callable[..., Any], args: tuple, seconds: float) -> An
     """Run ``fn(*args)`` with a soft timeout. Uses signal.SIGALRM where
     available (Unix), falls back to a simple thread-based watchdog."""
     import threading
+
     result: list[Any] = [None]
     error: list[Optional[BaseException]] = [None]
 

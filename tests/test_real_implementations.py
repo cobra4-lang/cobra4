@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -57,13 +56,21 @@ def test_local_module_import():
         )
         # Run a program that imports it
         program = Path(d, "main.c4")
-        program.write_text("use greet\nprint(greet.hello('cobra4'))\n", encoding="utf-8")
+        program.write_text(
+            "use greet\nprint(greet.hello('cobra4'))\n", encoding="utf-8"
+        )
 
         env = os.environ.copy()
-        env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + d + os.pathsep + env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            str(PROJECT_ROOT) + os.pathsep + d + os.pathsep + env.get("PYTHONPATH", "")
+        )
         proc = subprocess.run(
             [sys.executable, "-m", "cobra4.cli", "run", str(program)],
-            cwd=d, env=env, capture_output=True, text=True, timeout=30,
+            cwd=d,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         assert proc.returncode == 0, proc.stderr
         assert "hello cobra4!" in proc.stdout
@@ -85,8 +92,11 @@ def test_k8s_manifest_generator():
     from cobra4.runtime.deploy import build_k8s_manifest
 
     yaml = build_k8s_manifest(
-        name="my-app", image="repo/my-app:v1",
-        replicas=3, port=8080, env={"FOO": "bar"},
+        name="my-app",
+        image="repo/my-app:v1",
+        replicas=3,
+        port=8080,
+        env={"FOO": "bar"},
     )
     assert "kind: Deployment" in yaml
     assert "kind: Service" in yaml
@@ -99,10 +109,13 @@ def test_lambda_packager_builds_zip():
     """The aws.lambda packager generates a deterministic zip."""
     from cobra4.runtime.deploy import build_lambda_package
 
-    def my_handler(req): return {"ok": True}
+    def my_handler(req):
+        return {"ok": True}
+
     zip_path = build_lambda_package(my_handler, "test-fn", 256)
     assert os.path.exists(zip_path)
     import zipfile
+
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
         assert "lambda_entry.py" in names
@@ -163,7 +176,11 @@ def test_c4_test_runner_executes():
         env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
         proc = subprocess.run(
             [sys.executable, "-m", "cobra4.cli", "test", str(tests_dir)],
-            cwd=d, env=env, capture_output=True, text=True, timeout=30,
+            cwd=d,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         # 1 pass, 1 fail → exit 1
         assert proc.returncode == 1
@@ -215,6 +232,7 @@ def test_source_map_column_precise():
 
 def test_stdlib_strings_real():
     from cobra4.stdlib import clear_cache
+
     clear_cache()
     import cobra4.stdlib.strings as s
 
@@ -238,7 +256,8 @@ def test_stdlib_data_real():
     joined = data.join(
         [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}],
         [{"id": 1, "age": 10}],
-        on="id", how="left",
+        on="id",
+        how="left",
     )
     assert len(joined) == 2  # a joined, b kept (left)
 
@@ -312,7 +331,11 @@ def test_log_analyzer_example_runs():
         py_file.write_text(code, encoding="utf-8")
         proc = subprocess.run(
             [sys.executable, str(py_file)],
-            cwd=d, env=env, capture_output=True, text=True, timeout=30,
+            cwd=d,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         assert proc.returncode == 0, proc.stderr
         assert (Path(d) / "_log_report.json").exists()
@@ -341,6 +364,7 @@ def test_webhook_router_example_compiles_and_runs():
         if True:
             ns = {"__name__": "__main__"}
             exec(code, ns)
+
             # Build a fake request and exercise the router.
             class Req:
                 def __init__(self, method, path, body=b""):
@@ -348,8 +372,10 @@ def test_webhook_router_example_compiles_and_runs():
                     self.path = path
                     self.headers = {"authorization": "Bearer dev-token"}
                     self.body = body
+
                 def json(self):
                     import json
+
                     return json.loads(self.body) if self.body else None
 
             req = Req("POST", "/orders", b'{"id":"x1","total":1.0}')
@@ -362,6 +388,7 @@ def test_webhook_router_example_compiles_and_runs():
     finally:
         # Dispose engine + clear env
         from cobra4.plugins.builtin import sql as sql_plugin
+
         if sql_plugin._default_engine is not None:
             sql_plugin._default_engine.dispose()
             sql_plugin._default_engine = None

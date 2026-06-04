@@ -18,7 +18,6 @@ from cobra4 import ast_nodes as N
 from cobra4.codegen import generate
 from cobra4.runtime.workflow import Workflow, WorkflowError
 
-
 # ---------- runtime ----------
 
 
@@ -129,12 +128,7 @@ def test_workflow_independent_tasks_run_in_order_for_determinism() -> None:
 
 
 def test_parse_workflow_decl_lists_tasks() -> None:
-    src = (
-        "workflow w {\n"
-        "    a = task f()\n"
-        "    b = task g(a)\n"
-        "}\n"
-    )
+    src = "workflow w {\n" "    a = task f()\n" "    b = task g(a)\n" "}\n"
     m = parse(src)
     assert isinstance(m.body[0], N.WorkflowDecl)
     wf = m.body[0]
@@ -178,7 +172,8 @@ def _run_c4(tmp_path: Path, src: str) -> tuple[int, str, str]:
     f.write_text(src)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(f)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -195,7 +190,7 @@ def test_e2e_simple_etl_workflow(tmp_path: Path) -> None:
         "    raw = task fetch()\n"
         "    transformed = task double(raw)\n"
         "}\n"
-        "log(\"got\", n=len(transformed), first=transformed[0])\n"
+        'log("got", n=len(transformed), first=transformed[0])\n'
     )
     code, _, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr
@@ -205,16 +200,16 @@ def test_e2e_simple_etl_workflow(tmp_path: Path) -> None:
 
 def test_e2e_workflow_retries_on_transient_failure(tmp_path: Path) -> None:
     src = (
-        "state = {\"n\": 0}\n"
+        'state = {"n": 0}\n'
         "fn flaky() {\n"
-        "    state[\"n\"] += 1\n"
-        "    if state[\"n\"] < 3 { raise ValueError(\"not yet\") }\n"
-        "    return \"ok\"\n"
+        '    state["n"] += 1\n'
+        '    if state["n"] < 3 { raise ValueError("not yet") }\n'
+        '    return "ok"\n'
         "}\n"
         "workflow w {\n"
         "    r = task flaky(retries=5)\n"
         "}\n"
-        "log(\"r\", v=r, n=state[\"n\"])\n"
+        'log("r", v=r, n=state["n"])\n'
     )
     code, _, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr

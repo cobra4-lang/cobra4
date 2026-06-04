@@ -10,7 +10,11 @@ import pytest
 
 from cobra4.plugins.builtin.prom import _transform, _split_kwargs
 from cobra4.runtime.prom import (
-    make_counter, make_histogram, make_gauge, metrics_text, reset_registry,
+    make_counter,
+    make_histogram,
+    make_gauge,
+    metrics_text,
+    reset_registry,
 )
 
 
@@ -42,7 +46,7 @@ def test_transform_histogram_with_buckets() -> None:
     src = 'metric histogram h labels=["r"] buckets=[10.0, 50.0] doc="x"\n'
     out = _transform(src)
     assert 'h = _c4_prom_make_histogram("h"' in out
-    assert 'buckets=[10.0, 50.0]' in out
+    assert "buckets=[10.0, 50.0]" in out
 
 
 def test_transform_gauge_minimal() -> None:
@@ -52,10 +56,10 @@ def test_transform_gauge_minimal() -> None:
 
 
 def test_transform_does_not_touch_other_lines() -> None:
-    src = "fn helper() = 42\nmetric counter c\nlog(\"ok\")\n"
+    src = 'fn helper() = 42\nmetric counter c\nlog("ok")\n'
     out = _transform(src)
     assert "fn helper() = 42" in out
-    assert "log(\"ok\")" in out
+    assert 'log("ok")' in out
 
 
 def test_split_kwargs_parses_list_with_strings() -> None:
@@ -163,14 +167,16 @@ def _run_c4(tmp_path: Path, src: str) -> tuple[int, str, str]:
     f.write_text(src)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(f)],
-        capture_output=True, text=True, cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
 
 def test_e2e_counter_increments_and_exposes(tmp_path: Path) -> None:
     src = (
-        'lang use prom\n'
+        "lang use prom\n"
         'metric counter requests labels=["status"] doc="reqs"\n'
         'requests.labels(status="200").inc()\n'
         'requests.labels(status="200").inc()\n'
@@ -180,15 +186,15 @@ def test_e2e_counter_increments_and_exposes(tmp_path: Path) -> None:
     assert code == 0, stderr
     assert "requests" in stderr
     # The counter incremented twice with status=200
-    assert '200' in stderr
+    assert "200" in stderr
 
 
 def test_e2e_histogram_observe(tmp_path: Path) -> None:
     src = (
-        'lang use prom\n'
+        "lang use prom\n"
         'metric histogram lat buckets=[10.0, 100.0] doc="latency"\n'
-        'lat.observe(5)\n'
-        'lat.observe(50)\n'
+        "lat.observe(5)\n"
+        "lat.observe(50)\n"
         'log("text", out=prom.metrics_text())\n'
     )
     code, _, stderr = _run_c4(tmp_path, src)
@@ -198,9 +204,9 @@ def test_e2e_histogram_observe(tmp_path: Path) -> None:
 
 def test_e2e_gauge_set(tmp_path: Path) -> None:
     src = (
-        'lang use prom\n'
+        "lang use prom\n"
         'metric gauge active doc="conns"\n'
-        'active.set(42)\n'
+        "active.set(42)\n"
         'log("text", out=prom.metrics_text())\n'
     )
     code, _, stderr = _run_c4(tmp_path, src)

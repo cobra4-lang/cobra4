@@ -18,7 +18,6 @@ import sys
 import time
 from typing import Any, TextIO
 
-
 _stream: TextIO = sys.stderr
 _format = os.environ.get("COBRA4_LOG_FORMAT", "kv")  # "kv" | "json"
 _otel_logger = None
@@ -74,18 +73,21 @@ def _emit(level: str, message: str, fields: dict) -> None:
         if _otel_logger:
             try:
                 from opentelemetry._logs import LogRecord, SeverityNumber  # type: ignore
+
                 sev = {
                     "info": SeverityNumber.INFO,
                     "warn": SeverityNumber.WARN,
                     "error": SeverityNumber.ERROR,
                 }.get(level, SeverityNumber.INFO)
-                _otel_logger.emit(LogRecord(
-                    timestamp=int(time.time() * 1e9),
-                    severity_number=sev,
-                    severity_text=level.upper(),
-                    body=message,
-                    attributes=dict(fields),
-                ))
+                _otel_logger.emit(
+                    LogRecord(
+                        timestamp=int(time.time() * 1e9),
+                        severity_number=sev,
+                        severity_text=level.upper(),
+                        body=message,
+                        attributes=dict(fields),
+                    )
+                )
             except Exception:  # pragma: no cover
                 pass
 
@@ -94,9 +96,9 @@ def _quote(v: Any) -> str:
     if isinstance(v, (int, float, bool)):
         return str(v)
     s = str(v)
-    if any(c in s for c in (" ", "\t", "=", "\"")):
-        s = s.replace("\\", "\\\\").replace("\"", "\\\"")
-        return f"\"{s}\""
+    if any(c in s for c in (" ", "\t", "=", '"')):
+        s = s.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{s}"'
     return s
 
 
@@ -105,21 +107,25 @@ class _LogProxy:
 
     def __call__(self, message: str = "", **fields: Any) -> None:
         from cobra4.runtime.effects import check as _check_effect
+
         _check_effect("log")
         _emit("info", message, fields)
 
     def info(self, message: str = "", **fields: Any) -> None:
         from cobra4.runtime.effects import check as _check_effect
+
         _check_effect("log")
         _emit("info", message, fields)
 
     def warn(self, message: str = "", **fields: Any) -> None:
         from cobra4.runtime.effects import check as _check_effect
+
         _check_effect("log")
         _emit("warn", message, fields)
 
     def error(self, message: str = "", **fields: Any) -> None:
         from cobra4.runtime.effects import check as _check_effect
+
         _check_effect("log")
         _emit("error", message, fields)
 

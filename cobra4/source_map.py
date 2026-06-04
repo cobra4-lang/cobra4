@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Segment:
-    py_col: int        # start column on the Python line
+    py_col: int  # start column on the Python line
     c4_line: int
     c4_col: int
 
@@ -32,7 +32,9 @@ class SourceMap:
 
     # ---------- writing ----------
 
-    def record(self, py_line: int, c4_line: int, py_col: int = 0, c4_col: int = 0) -> None:
+    def record(
+        self, py_line: int, c4_line: int, py_col: int = 0, c4_col: int = 0
+    ) -> None:
         segs = self.lines.setdefault(py_line, [])
         segs.append(Segment(py_col=py_col, c4_line=c4_line, c4_col=c4_col))
         # Keep sorted for binary-search lookup.

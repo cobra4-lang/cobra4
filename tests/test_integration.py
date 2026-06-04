@@ -29,7 +29,9 @@ def _run_c4(tmp_path: Path, src: str, *args: str) -> tuple[int, str, str]:
     f.write_text(src)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", *(args or ("run",)), str(f)],
-        capture_output=True, text=True, cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -42,8 +44,8 @@ def test_data_class_with_result_propagation(tmp_path: Path) -> None:
         "data class User(name: str, age: int)\n"
         "\n"
         "fn parse_user(blob) {\n"
-        "    if not blob[\"name\"] { return Err(\"missing name\") }\n"
-        "    return Ok(User(name=blob[\"name\"], age=blob[\"age\"]))\n"
+        '    if not blob["name"] { return Err("missing name") }\n'
+        '    return Ok(User(name=blob["name"], age=blob["age"]))\n'
         "}\n"
         "\n"
         "fn process(blobs) {\n"
@@ -55,16 +57,16 @@ def test_data_class_with_result_propagation(tmp_path: Path) -> None:
         "    return Ok(out)\n"
         "}\n"
         "\n"
-        "good = process([{\"name\": \"a\", \"age\": 30}, {\"name\": \"b\", \"age\": 40}])\n"
+        'good = process([{"name": "a", "age": 30}, {"name": "b", "age": 40}])\n'
         "match good {\n"
-        "    case Ok(us) { log(\"ok\", n=len(us), first=us[0].name) }\n"
-        "    case Err(e) { log(\"err\", e=e) }\n"
+        '    case Ok(us) { log("ok", n=len(us), first=us[0].name) }\n'
+        '    case Err(e) { log("err", e=e) }\n'
         "}\n"
         "\n"
-        "bad = process([{\"name\": \"a\", \"age\": 30}, {\"name\": \"\", \"age\": 0}])\n"
+        'bad = process([{"name": "a", "age": 30}, {"name": "", "age": 0}])\n'
         "match bad {\n"
-        "    case Ok(us) { log(\"unexpected\", n=len(us)) }\n"
-        "    case Err(e) { log(\"propagated\", e=e) }\n"
+        '    case Ok(us) { log("unexpected", n=len(us)) }\n'
+        '    case Err(e) { log("propagated", e=e) }\n'
         "}\n"
     )
     code, _, stderr = _run_c4(tmp_path, src)
@@ -87,15 +89,15 @@ def test_sum_type_match_with_result_combo(tmp_path: Path) -> None:
         "\n"
         "fn summarize(j) {\n"
         "    match j {\n"
-        "        case Pending(id) { return \"pending: {id}\" }\n"
-        "        case Done(id, output) { return \"done: {id} -> {output}\" }\n"
-        "        case Failed(id, reason) { return \"failed: {id} ({reason})\" }\n"
+        '        case Pending(id) { return "pending: {id}" }\n'
+        '        case Done(id, output) { return "done: {id} -> {output}" }\n'
+        '        case Failed(id, reason) { return "failed: {id} ({reason})" }\n'
         "    }\n"
         "}\n"
         "\n"
-        "log(\"a\", v=summarize(Pending(id=\"j1\")))\n"
-        "log(\"b\", v=summarize(Done(id=\"j2\", output=\"42\")))\n"
-        "log(\"c\", v=summarize(Failed(id=\"j3\", reason=\"oom\")))\n"
+        'log("a", v=summarize(Pending(id="j1")))\n'
+        'log("b", v=summarize(Done(id="j2", output="42")))\n'
+        'log("c", v=summarize(Failed(id="j3", reason="oom")))\n'
     )
     code, _, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr
@@ -118,7 +120,7 @@ def test_async_parallel_with_sum_type_outcomes(tmp_path: Path) -> None:
         "\n"
         "async fn process(i) {\n"
         "    await asyncio.sleep(0.001)\n"
-        "    if i % 3 == 0 { return Lose(id=i, reason=\"div3\") }\n"
+        '    if i % 3 == 0 { return Lose(id=i, reason="div3") }\n'
         "    return Win(id=i)\n"
         "}\n"
         "\n"
@@ -126,7 +128,7 @@ def test_async_parallel_with_sum_type_outcomes(tmp_path: Path) -> None:
         "    results = each i in range(9) in parallel(workers=4) { await process(i) }\n"
         "    wins = each r in results where isinstance(r, Win) { r }\n"
         "    losses = each r in results where isinstance(r, Lose) { r }\n"
-        "    log(\"summary\", wins=len(wins), losses=len(losses))\n"
+        '    log("summary", wins=len(wins), losses=len(losses))\n'
         "}\n"
         "\n"
         "asyncio.run(main())\n"
@@ -145,11 +147,11 @@ def test_workflow_with_retry_and_data_class_payload(tmp_path: Path) -> None:
     src = (
         "data class Payload(rows: list, source: str)\n"
         "\n"
-        "state = {\"attempt\": 0}\n"
+        'state = {"attempt": 0}\n'
         "fn flaky_fetch() {\n"
-        "    state[\"attempt\"] += 1\n"
-        "    if state[\"attempt\"] < 2 { raise IOError(\"transient\") }\n"
-        "    return Payload(rows=[1, 2, 3], source=\"flaky\")\n"
+        '    state["attempt"] += 1\n'
+        '    if state["attempt"] < 2 { raise IOError("transient") }\n'
+        '    return Payload(rows=[1, 2, 3], source="flaky")\n'
         "}\n"
         "fn count(p) = len(p.rows)\n"
         "\n"
@@ -157,7 +159,7 @@ def test_workflow_with_retry_and_data_class_payload(tmp_path: Path) -> None:
         "    payload = task flaky_fetch(retries=3)\n"
         "    n       = task count(payload)\n"
         "}\n"
-        "log(\"pipeline\", n=n, source=payload.source, attempts=state[\"attempt\"])\n"
+        'log("pipeline", n=n, source=payload.source, attempts=state["attempt"])\n'
     )
     code, _, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr
@@ -180,7 +182,7 @@ def test_workflow_after_helpers_uses_module_scope(tmp_path: Path) -> None:
         "    raw = task build_data()\n"
         "    top = task pick_max(raw)\n"
         "}\n"
-        "log(\"top\", v=top)\n"
+        'log("top", v=top)\n'
     )
     code, _, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr
@@ -190,17 +192,18 @@ def test_workflow_after_helpers_uses_module_scope(tmp_path: Path) -> None:
 # ---------- effect annotation warns on workflow body ----------
 
 
-def test_pure_fn_calling_log_inside_workflow_still_warns_at_check(tmp_path: Path) -> None:
+def test_pure_fn_calling_log_inside_workflow_still_warns_at_check(
+    tmp_path: Path,
+) -> None:
     """Effects are checked statically — independent of whether the call
     happens inside a workflow's lambda."""
-    src = (
-        "fn pure_helper(x) with [] { log(\"side\") return x }\n"
-    )
+    src = 'fn pure_helper(x) with [] { log("side") return x }\n'
     p = tmp_path / "prog.c4"
     p.write_text(src)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "check", str(p)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     out = proc.stdout + proc.stderr
     assert "E001" in out, out
@@ -214,26 +217,32 @@ def test_iac_apply_then_workflow_reads_resource_state(tmp_path: Path) -> None:
     that the resource created. Ties together the two phases."""
     infra_src = tmp_path / "infra.c4"
     infra_src.write_text(
-        'resource manifest = local.file {\n'
+        "resource manifest = local.file {\n"
         '    path: "./manifest.json"\n'
         '    contents: {"items": [{"id": 1}, {"id": 2}, {"id": 3}]}\n'
-        '}\n'
+        "}\n"
     )
-    code, out = subprocess.run(
-        [sys.executable, "-m", "cobra4.cli", "infra", "apply", str(infra_src)],
-        capture_output=True, text=True, cwd=tmp_path,
-    ).returncode, ""
+    code, out = (
+        subprocess.run(
+            [sys.executable, "-m", "cobra4.cli", "infra", "apply", str(infra_src)],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        ).returncode,
+        "",
+    )
     assert code == 0
     assert (tmp_path / "manifest.json").exists()
 
     consume_src = tmp_path / "consume.c4"
     consume_src.write_text(
-        'm = read("./manifest.json")\n'
-        'log("loaded", n=len(m["items"]))\n'
+        'm = read("./manifest.json")\n' 'log("loaded", n=len(m["items"]))\n'
     )
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(consume_src)],
-        capture_output=True, text=True, cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
     )
     assert proc.returncode == 0, proc.stderr
     assert "n=3" in proc.stderr
@@ -250,7 +259,7 @@ def test_streaming_window_and_collect_inside_async_fn(tmp_path: Path) -> None:
         "async fn pipeline() {\n"
         "    src = s.from_iter([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])\n"
         "    batches = await src.filter(fn(x) = x % 2 == 0).window(size=2).collect()\n"
-        "    log(\"batches\", n=len(batches), first=batches[0], last=batches[-1])\n"
+        '    log("batches", n=len(batches), first=batches[0], last=batches[-1])\n'
         "}\n"
         "\n"
         "asyncio.run(pipeline())\n"
@@ -264,24 +273,29 @@ def test_streaming_window_and_collect_inside_async_fn(tmp_path: Path) -> None:
 # ---------- regression: existing examples still run end-to-end ----------
 
 
-@pytest.mark.parametrize("ex", [
-    "examples/01_wordcount.c4",
-    "examples/03_etl.c4",
-    "examples/05_schedule.c4",
-    "examples/08_stdlib_dogfood.c4",
-    "examples/11_code_reviewer.c4",
-])
+@pytest.mark.parametrize(
+    "ex",
+    [
+        "examples/01_wordcount.c4",
+        "examples/03_etl.c4",
+        "examples/05_schedule.c4",
+        "examples/08_stdlib_dogfood.c4",
+        "examples/11_code_reviewer.c4",
+    ],
+)
 def test_existing_examples_still_pass(ex: str) -> None:
     """If any of the new features broke a pre-existing example, this
     test fails — it's our headline 'no regression' check."""
     repo_root = Path(__file__).resolve().parent.parent
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(repo_root / ex)],
-        capture_output=True, text=True, cwd=repo_root,
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
     )
-    assert proc.returncode == 0, (
-        f"example {ex} regressed:\nSTDOUT={proc.stdout}\nSTDERR={proc.stderr}"
-    )
+    assert (
+        proc.returncode == 0
+    ), f"example {ex} regressed:\nSTDOUT={proc.stdout}\nSTDERR={proc.stderr}"
 
 
 # ---------- pure runtime composability ----------
@@ -300,6 +314,7 @@ def test_runtime_workflow_uses_dataclass_results() -> None:
 def test_runtime_stream_then_workflow_pipeline() -> None:
     """The stream module returns a list via collect(); the workflow can
     consume that list as a normal task input."""
+
     async def pipeline() -> list[int]:
         return await from_iter([1, 2, 3, 4, 5]).filter(lambda x: x > 2).collect()
 
@@ -324,7 +339,7 @@ def test_run_examples_via_cli(tmp_path: Path) -> None:
         "data class Box(value: int)\n"
         "fn open_box(b) = b.value\n"
         "b = Box(value=42)\n"
-        "log(\"box\", v=open_box(b))\n"
+        'log("box", v=open_box(b))\n'
     )
     code, _, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr

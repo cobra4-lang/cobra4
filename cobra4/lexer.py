@@ -18,7 +18,6 @@ from lark import Lark
 from lark.lexer import Token
 from lark.indenter import PostLex
 
-
 GRAMMAR_PATH = Path(__file__).with_name("grammar.lark")
 
 
@@ -43,27 +42,89 @@ class _BracketAwarePostLex(PostLex):
     # uppercase-named terminals (e.g. `"if"` → terminal `IF`). We match
     # on token *type*, not value, because keywords are NOT classified as
     # `NAME` once Lark has tokenized them.
-    _BLOCK_KEYWORD_TYPES = frozenset({
-        "IF", "ELIF", "ELSE", "WHILE", "FOR", "EACH", "EVERY", "ON",
-        "FN", "CLASS", "MATCH", "CASE", "TRY", "CATCH", "FINALLY",
-        "DEPLOY", "DO",
-    })
-    _BLOCK_KEYWORD_VALUES = frozenset({
-        "if", "elif", "else", "while", "for", "each", "every", "on",
-        "fn", "class", "match", "case", "try", "catch", "finally",
-        "deploy", "do",
-    })
+    _BLOCK_KEYWORD_TYPES = frozenset(
+        {
+            "IF",
+            "ELIF",
+            "ELSE",
+            "WHILE",
+            "FOR",
+            "EACH",
+            "EVERY",
+            "ON",
+            "FN",
+            "CLASS",
+            "MATCH",
+            "CASE",
+            "TRY",
+            "CATCH",
+            "FINALLY",
+            "DEPLOY",
+            "DO",
+        }
+    )
+    _BLOCK_KEYWORD_VALUES = frozenset(
+        {
+            "if",
+            "elif",
+            "else",
+            "while",
+            "for",
+            "each",
+            "every",
+            "on",
+            "fn",
+            "class",
+            "match",
+            "case",
+            "try",
+            "catch",
+            "finally",
+            "deploy",
+            "do",
+        }
+    )
 
     # Keywords that ALWAYS introduce a block (no ambiguity with ternary
     # / expression-level uses).
-    _UNAMBIGUOUS_BLOCK_TYPES = frozenset({
-        "IF", "WHILE", "FOR", "EACH", "EVERY", "ON", "FN", "CLASS",
-        "MATCH", "CASE", "TRY", "CATCH", "FINALLY", "DEPLOY", "DO",
-    })
-    _UNAMBIGUOUS_BLOCK_VALUES = frozenset({
-        "if", "while", "for", "each", "every", "on", "fn", "class",
-        "match", "case", "try", "catch", "finally", "deploy", "do",
-    })
+    _UNAMBIGUOUS_BLOCK_TYPES = frozenset(
+        {
+            "IF",
+            "WHILE",
+            "FOR",
+            "EACH",
+            "EVERY",
+            "ON",
+            "FN",
+            "CLASS",
+            "MATCH",
+            "CASE",
+            "TRY",
+            "CATCH",
+            "FINALLY",
+            "DEPLOY",
+            "DO",
+        }
+    )
+    _UNAMBIGUOUS_BLOCK_VALUES = frozenset(
+        {
+            "if",
+            "while",
+            "for",
+            "each",
+            "every",
+            "on",
+            "fn",
+            "class",
+            "match",
+            "case",
+            "try",
+            "catch",
+            "finally",
+            "deploy",
+            "do",
+        }
+    )
     # `else` and `elif` are block-only when they FOLLOW a `}` (closing
     # the prior arm). In ternary `... if cond else expr` they appear
     # right after an expression with no `}` in between.
@@ -96,16 +157,14 @@ class _BracketAwarePostLex(PostLex):
                         depth_dict -= 1
             elif depth_pl == 0:
                 # Unambiguous block-introducing keywords.
-                if (
-                    tok.type in self._UNAMBIGUOUS_BLOCK_TYPES
-                    or (tok.type == "NAME" and tok.value in self._UNAMBIGUOUS_BLOCK_VALUES)
+                if tok.type in self._UNAMBIGUOUS_BLOCK_TYPES or (
+                    tok.type == "NAME" and tok.value in self._UNAMBIGUOUS_BLOCK_VALUES
                 ):
                     expecting_block = True
                 # `else`/`elif` only count as block-introducing when they
                 # immediately follow a closing `}` (an if-block arm).
-                elif (
-                    tok.type in self._CONTEXTUAL_BLOCK_TYPES
-                    or (tok.type == "NAME" and tok.value in self._CONTEXTUAL_BLOCK_VALUES)
+                elif tok.type in self._CONTEXTUAL_BLOCK_TYPES or (
+                    tok.type == "NAME" and tok.value in self._CONTEXTUAL_BLOCK_VALUES
                 ):
                     if last_seen is not None and last_seen.type == "RBRACE":
                         expecting_block = True
@@ -113,11 +172,7 @@ class _BracketAwarePostLex(PostLex):
             # A toplevel newline ends a statement, so any "block expected"
             # context that wasn't satisfied by a `{` on the same line was
             # really an expression-level use (e.g. ternary `... else ...`).
-            if (
-                tok.type == "_NL"
-                and depth_pl == 0
-                and depth_dict == 0
-            ):
+            if tok.type == "_NL" and depth_pl == 0 and depth_dict == 0:
                 expecting_block = False
 
             if tok.type == "_NL" and (depth_pl > 0 or depth_dict > 0):

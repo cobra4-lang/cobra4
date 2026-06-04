@@ -9,7 +9,6 @@ import pytest
 
 from cobra4.runtime.stream import Stream, from_async, from_iter
 
-
 # ---------- sources ----------
 
 
@@ -26,6 +25,7 @@ def test_from_async_works_with_user_async_generator() -> None:
     async def gen():
         for i in range(3):
             yield i * 10
+
     out = asyncio.run(from_async(gen()).collect())
     assert out == [0, 10, 20]
 
@@ -41,6 +41,7 @@ def test_map_applies_sync_callable() -> None:
 def test_map_applies_async_callable() -> None:
     async def doubler(x):
         return x * 2
+
     out = asyncio.run(from_iter([1, 2, 3]).map(doubler).collect())
     assert out == [2, 4, 6]
 
@@ -81,6 +82,7 @@ def test_window_size_one_yields_singletons() -> None:
 def test_window_tumbling_groups_by_time() -> None:
     """Source yields immediately; tumbling=0 emits one window per item.
     Smoke check that the operator wires up correctly."""
+
     async def gen():
         for x in range(4):
             yield x
@@ -109,8 +111,8 @@ def test_chain_filter_map_window_collect() -> None:
     """Realistic data-pipeline shape: filter, transform, group, collect."""
     out = asyncio.run(
         from_iter(range(10))
-        .filter(lambda x: x % 2 == 0)        # 0, 2, 4, 6, 8
-        .map(lambda x: x * x)                # 0, 4, 16, 36, 64
+        .filter(lambda x: x % 2 == 0)  # 0, 2, 4, 6, 8
+        .map(lambda x: x * x)  # 0, 4, 16, 36, 64
         .window(size=2)
         .collect()
     )
@@ -125,8 +127,10 @@ def test_for_each_invokes_sink_for_every_item() -> None:
 
 def test_for_each_handles_async_sink() -> None:
     seen: list[int] = []
+
     async def sink(x):
         await asyncio.sleep(0)
         seen.append(x * 10)
+
     asyncio.run(from_iter([1, 2, 3]).for_each(sink))
     assert seen == [10, 20, 30]

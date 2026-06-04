@@ -28,7 +28,6 @@ from cobra4.resolver import resolve
 from cobra4.typecheck import TypeChecker
 from cobra4.tools.fmt import format_module
 
-
 # ---------- IO ----------
 
 
@@ -53,7 +52,11 @@ class _Reader:
         length = int(headers.get("content-length", "0"))
         if length <= 0:
             return None
-        body = self.stream.read(length) if hasattr(self.stream, "read") else self.stream.buffer.read(length)
+        body = (
+            self.stream.read(length)
+            if hasattr(self.stream, "read")
+            else self.stream.buffer.read(length)
+        )
         if isinstance(body, bytes):
             body = body.decode("utf-8")
         return json.loads(body)
@@ -68,7 +71,9 @@ class _Writer:
         body = json.dumps(msg).encode("utf-8")
         header = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii")
         with self.lock:
-            target = self.stream.buffer if hasattr(self.stream, "buffer") else self.stream
+            target = (
+                self.stream.buffer if hasattr(self.stream, "buffer") else self.stream
+            )
             target.write(header)
             target.write(body)
             target.flush()
@@ -93,23 +98,25 @@ class _Server:
         msg_id = msg.get("id")
 
         if method == "initialize":
-            w.write({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {
-                    "capabilities": {
-                        "textDocumentSync": 1,
-                        "documentFormattingProvider": True,
-                        "hoverProvider": True,
-                        "definitionProvider": True,
-                        "referencesProvider": True,
-                        "documentSymbolProvider": True,
-                        "completionProvider": {"triggerCharacters": [".", " "]},
-                        "signatureHelpProvider": {"triggerCharacters": ["(", ","]},
+            w.write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "result": {
+                        "capabilities": {
+                            "textDocumentSync": 1,
+                            "documentFormattingProvider": True,
+                            "hoverProvider": True,
+                            "definitionProvider": True,
+                            "referencesProvider": True,
+                            "documentSymbolProvider": True,
+                            "completionProvider": {"triggerCharacters": [".", " "]},
+                            "signatureHelpProvider": {"triggerCharacters": ["(", ","]},
+                        },
+                        "serverInfo": {"name": "cobra4-lsp", "version": "0.3.0"},
                     },
-                    "serverInfo": {"name": "cobra4-lsp", "version": "0.3.0"},
-                },
-            })
+                }
+            )
             return
         if method == "initialized":
             return
@@ -143,13 +150,15 @@ class _Server:
             try:
                 module = parse(text, source_path=uri)
                 formatted = format_module(module)
-                edits = [{
-                    "range": {
-                        "start": {"line": 0, "character": 0},
-                        "end": {"line": 999_999, "character": 0},
-                    },
-                    "newText": formatted,
-                }]
+                edits = [
+                    {
+                        "range": {
+                            "start": {"line": 0, "character": 0},
+                            "end": {"line": 999_999, "character": 0},
+                        },
+                        "newText": formatted,
+                    }
+                ]
             except ParseError:
                 edits = []
             w.write({"jsonrpc": "2.0", "id": msg_id, "result": edits})
@@ -161,24 +170,30 @@ class _Server:
             col = params["position"]["character"]
             info = self._hover_info(text, line, col)
             if info:
-                w.write({
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "result": {"contents": {"kind": "markdown", "value": info}},
-                })
+                w.write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": msg_id,
+                        "result": {"contents": {"kind": "markdown", "value": info}},
+                    }
+                )
             else:
                 w.write({"jsonrpc": "2.0", "id": msg_id, "result": None})
             return
         if method == "textDocument/definition":
             uri = params["textDocument"]["uri"]
             text = self.docs.get(uri, "")
-            loc = self._definition(text, uri, params["position"]["line"], params["position"]["character"])
+            loc = self._definition(
+                text, uri, params["position"]["line"], params["position"]["character"]
+            )
             w.write({"jsonrpc": "2.0", "id": msg_id, "result": loc})
             return
         if method == "textDocument/references":
             uri = params["textDocument"]["uri"]
             text = self.docs.get(uri, "")
-            locs = self._references(text, uri, params["position"]["line"], params["position"]["character"])
+            locs = self._references(
+                text, uri, params["position"]["line"], params["position"]["character"]
+            )
             w.write({"jsonrpc": "2.0", "id": msg_id, "result": locs})
             return
         if method == "textDocument/documentSymbol":
@@ -190,23 +205,35 @@ class _Server:
         if method == "textDocument/completion":
             uri = params["textDocument"]["uri"]
             text = self.docs.get(uri, "")
-            items = self._completions(text, params["position"]["line"], params["position"]["character"])
-            w.write({"jsonrpc": "2.0", "id": msg_id, "result": {"items": items, "isIncomplete": False}})
+            items = self._completions(
+                text, params["position"]["line"], params["position"]["character"]
+            )
+            w.write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "result": {"items": items, "isIncomplete": False},
+                }
+            )
             return
         if method == "textDocument/signatureHelp":
             uri = params["textDocument"]["uri"]
             text = self.docs.get(uri, "")
-            sig = self._signature_help(text, params["position"]["line"], params["position"]["character"])
+            sig = self._signature_help(
+                text, params["position"]["line"], params["position"]["character"]
+            )
             w.write({"jsonrpc": "2.0", "id": msg_id, "result": sig})
             return
 
         # Unhandled but expects response
         if msg_id is not None:
-            w.write({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "error": {"code": -32601, "message": f"method not found: {method}"},
-            })
+            w.write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "error": {"code": -32601, "message": f"method not found: {method}"},
+                }
+            )
 
     # ----- diagnostics -----
 
@@ -216,12 +243,14 @@ class _Server:
         try:
             module = parse(text, source_path=uri)
         except ParseError as e:
-            diags.append({
-                "range": _range(e.line - 1, e.column - 1, e.line - 1, e.column),
-                "severity": 1,  # error
-                "source": "cobra4",
-                "message": e.message,
-            })
+            diags.append(
+                {
+                    "range": _range(e.line - 1, e.column - 1, e.line - 1, e.column),
+                    "severity": 1,  # error
+                    "source": "cobra4",
+                    "message": e.message,
+                }
+            )
             module = None
         if module is not None:
             rr = resolve(module)
@@ -232,28 +261,44 @@ class _Server:
             for d in rr.diagnostics:
                 if d.loc is None:
                     continue
-                diags.append({
-                    "range": _range(d.loc.line - 1, d.loc.column - 1, d.loc.line - 1, d.loc.column + 5),
-                    "severity": 1 if d.severity == "error" else 2,
-                    "source": "cobra4",
-                    "code": d.code,
-                    "message": d.message,
-                })
+                diags.append(
+                    {
+                        "range": _range(
+                            d.loc.line - 1,
+                            d.loc.column - 1,
+                            d.loc.line - 1,
+                            d.loc.column + 5,
+                        ),
+                        "severity": 1 if d.severity == "error" else 2,
+                        "source": "cobra4",
+                        "code": d.code,
+                        "message": d.message,
+                    }
+                )
             for d in TypeChecker().check(module):
                 if d.loc is None:
                     continue
-                diags.append({
-                    "range": _range(d.loc.line - 1, d.loc.column - 1, d.loc.line - 1, d.loc.column + 5),
-                    "severity": 2,  # warning
-                    "source": "cobra4-types",
-                    "code": d.code,
-                    "message": d.message,
-                })
-        w.write({
-            "jsonrpc": "2.0",
-            "method": "textDocument/publishDiagnostics",
-            "params": {"uri": uri, "diagnostics": diags},
-        })
+                diags.append(
+                    {
+                        "range": _range(
+                            d.loc.line - 1,
+                            d.loc.column - 1,
+                            d.loc.line - 1,
+                            d.loc.column + 5,
+                        ),
+                        "severity": 2,  # warning
+                        "source": "cobra4-types",
+                        "code": d.code,
+                        "message": d.message,
+                    }
+                )
+        w.write(
+            {
+                "jsonrpc": "2.0",
+                "method": "textDocument/publishDiagnostics",
+                "params": {"uri": uri, "diagnostics": diags},
+            }
+        )
 
     def _word_at(self, text: str, line: int, col: int) -> Optional[str]:
         lines = text.splitlines()
@@ -283,7 +328,9 @@ class _Server:
             return None
         return {
             "uri": uri,
-            "range": _range(loc.line - 1, loc.column - 1, loc.line - 1, loc.column - 1 + len(name)),
+            "range": _range(
+                loc.line - 1, loc.column - 1, loc.line - 1, loc.column - 1 + len(name)
+            ),
         }
 
     def _find_decl(self, body, name):
@@ -348,7 +395,15 @@ class _Server:
 
         visit(module)
         return [
-            {"uri": uri, "range": _range(loc.line - 1, loc.column - 1, loc.line - 1, loc.column - 1 + len(name))}
+            {
+                "uri": uri,
+                "range": _range(
+                    loc.line - 1,
+                    loc.column - 1,
+                    loc.line - 1,
+                    loc.column - 1 + len(name),
+                ),
+            }
             for loc in locs
         ]
 
@@ -363,29 +418,43 @@ class _Server:
         symbols = []
         for s in module.body:
             if isinstance(s, N.FnDecl) and s.loc:
-                symbols.append({
-                    "name": s.name,
-                    "kind": 12,  # Function
-                    "range": _range(s.loc.line - 1, 0, s.loc.line - 1, 100),
-                    "selectionRange": _range(s.loc.line - 1, 0, s.loc.line - 1, 100),
-                })
+                symbols.append(
+                    {
+                        "name": s.name,
+                        "kind": 12,  # Function
+                        "range": _range(s.loc.line - 1, 0, s.loc.line - 1, 100),
+                        "selectionRange": _range(
+                            s.loc.line - 1, 0, s.loc.line - 1, 100
+                        ),
+                    }
+                )
             elif isinstance(s, N.ClassDecl) and s.loc:
                 children = []
                 for inner in s.body:
                     if isinstance(inner, N.FnDecl) and inner.loc:
-                        children.append({
-                            "name": inner.name,
-                            "kind": 6,  # Method
-                            "range": _range(inner.loc.line - 1, 0, inner.loc.line - 1, 100),
-                            "selectionRange": _range(inner.loc.line - 1, 0, inner.loc.line - 1, 100),
-                        })
-                symbols.append({
-                    "name": s.name,
-                    "kind": 5,  # Class
-                    "range": _range(s.loc.line - 1, 0, s.loc.line - 1, 100),
-                    "selectionRange": _range(s.loc.line - 1, 0, s.loc.line - 1, 100),
-                    "children": children,
-                })
+                        children.append(
+                            {
+                                "name": inner.name,
+                                "kind": 6,  # Method
+                                "range": _range(
+                                    inner.loc.line - 1, 0, inner.loc.line - 1, 100
+                                ),
+                                "selectionRange": _range(
+                                    inner.loc.line - 1, 0, inner.loc.line - 1, 100
+                                ),
+                            }
+                        )
+                symbols.append(
+                    {
+                        "name": s.name,
+                        "kind": 5,  # Class
+                        "range": _range(s.loc.line - 1, 0, s.loc.line - 1, 100),
+                        "selectionRange": _range(
+                            s.loc.line - 1, 0, s.loc.line - 1, 100
+                        ),
+                        "children": children,
+                    }
+                )
         return symbols
 
     def _completions(self, text: str, line: int, col: int):
@@ -404,17 +473,51 @@ class _Server:
         src_line = lines[line] if line < len(lines) else ""
         prefix_char = src_line[col - 1] if 0 < col <= len(src_line) else ""
         if prefix_char == ".":
-            return self._member_completions(src_line[:col - 1])
+            return self._member_completions(src_line[: col - 1])
 
         keywords = [
-            "if", "elif", "else", "while", "for", "each", "in", "and", "or", "not",
-            "True", "False", "None", "fn", "class", "return", "raise",
-            "break", "continue", "pass", "match", "case", "try", "catch", "finally",
-            "use", "as", "where", "every", "on", "event", "from", "to", "parallel",
-            "serve", "deploy", "lang",
+            "if",
+            "elif",
+            "else",
+            "while",
+            "for",
+            "each",
+            "in",
+            "and",
+            "or",
+            "not",
+            "True",
+            "False",
+            "None",
+            "fn",
+            "class",
+            "return",
+            "raise",
+            "break",
+            "continue",
+            "pass",
+            "match",
+            "case",
+            "try",
+            "catch",
+            "finally",
+            "use",
+            "as",
+            "where",
+            "every",
+            "on",
+            "event",
+            "from",
+            "to",
+            "parallel",
+            "serve",
+            "deploy",
+            "lang",
         ]
-        items: list[dict] = [{"label": kw, "kind": 14} for kw in keywords]  # 14 = Keyword
-        for b in (_PY_BUILTINS | _C4_BUILTINS):
+        items: list[dict] = [
+            {"label": kw, "kind": 14} for kw in keywords
+        ]  # 14 = Keyword
+        for b in _PY_BUILTINS | _C4_BUILTINS:
             items.append({"label": b, "kind": 3})  # Function (built-in)
 
         try:
@@ -535,7 +638,11 @@ class _Server:
                         walk_stmts(eb, in_scope=in_scope, end_line=extent_end)
                     walk_stmts(s.orelse, in_scope=in_scope, end_line=extent_end)
                 elif isinstance(s, (N.While, N.Every, N.OnEvent)) and cursor_inside:
-                    walk_stmts(getattr(s, "body", []) or [], in_scope=in_scope, end_line=extent_end)
+                    walk_stmts(
+                        getattr(s, "body", []) or [],
+                        in_scope=in_scope,
+                        end_line=extent_end,
+                    )
                 elif isinstance(s, N.Try) and cursor_inside:
                     walk_stmts(s.body, in_scope=in_scope, end_line=extent_end)
                     for c in s.catches:
@@ -558,6 +665,7 @@ class _Server:
         """Largest ``loc.line`` reachable from ``stmts``. Used only to
         decide whether the cursor is inside an expression-position EachExpr."""
         from cobra4 import ast_nodes as N
+
         mx = 0
 
         def visit(node):
@@ -582,6 +690,7 @@ class _Server:
 
     def _pattern_binds(self, pat) -> list[str]:
         from cobra4 import ast_nodes as N
+
         if pat is None:
             return []
         names: list[str] = []
@@ -612,32 +721,81 @@ class _Server:
     # the runtime we can offer the right set.
     _KNOWN_MEMBERS: dict[str, list[tuple[str, int]]] = {
         # http.Request — see cobra4/runtime/http.py / serve handler API
-        "req":   [("method", 5), ("path", 5), ("params", 5), ("headers", 5),
-                  ("body", 5), ("json", 2), ("text", 2)],
-        "request": [("method", 5), ("path", 5), ("params", 5), ("headers", 5),
-                    ("body", 5), ("json", 2), ("text", 2)],
+        "req": [
+            ("method", 5),
+            ("path", 5),
+            ("params", 5),
+            ("headers", 5),
+            ("body", 5),
+            ("json", 2),
+            ("text", 2),
+        ],
+        "request": [
+            ("method", 5),
+            ("path", 5),
+            ("params", 5),
+            ("headers", 5),
+            ("body", 5),
+            ("json", 2),
+            ("text", 2),
+        ],
         # CommandResult from fleet.run
-        "result":  [("stdout", 5), ("stderr", 5), ("returncode", 5), ("ok", 5)],
+        "result": [("stdout", 5), ("stderr", 5), ("returncode", 5), ("ok", 5)],
         # log() namespace
-        "log":     [("info", 2), ("warn", 2), ("error", 2), ("debug", 2)],
+        "log": [("info", 2), ("warn", 2), ("error", 2), ("debug", 2)],
         # SmartFn methods
-        "read":    [("register", 2), ("handlers", 5)],
-        "save":    [("register", 2), ("handlers", 5)],
+        "read": [("register", 2), ("handlers", 5)],
+        "save": [("register", 2), ("handlers", 5)],
         # Host (fleet)
-        "host":    [("name", 5), ("addr", 5), ("user", 5), ("port", 5), ("extra", 5)],
-        "h":       [("name", 5), ("addr", 5), ("user", 5), ("port", 5), ("extra", 5)],
+        "host": [("name", 5), ("addr", 5), ("user", 5), ("port", 5), ("extra", 5)],
+        "h": [("name", 5), ("addr", 5), ("user", 5), ("port", 5), ("extra", 5)],
     }
 
     # Per-string-method completion. Keep small and idiomatic.
     _STRING_METHODS = [
-        "upper", "lower", "strip", "lstrip", "rstrip", "split", "splitlines",
-        "startswith", "endswith", "replace", "find", "join", "format",
-        "encode", "decode", "isdigit", "isalpha", "isalnum",
+        "upper",
+        "lower",
+        "strip",
+        "lstrip",
+        "rstrip",
+        "split",
+        "splitlines",
+        "startswith",
+        "endswith",
+        "replace",
+        "find",
+        "join",
+        "format",
+        "encode",
+        "decode",
+        "isdigit",
+        "isalpha",
+        "isalnum",
     ]
-    _LIST_METHODS = ["append", "extend", "insert", "pop", "remove", "sort",
-                     "reverse", "count", "index", "clear", "copy"]
-    _DICT_METHODS = ["get", "keys", "values", "items", "update", "pop",
-                     "setdefault", "clear", "copy"]
+    _LIST_METHODS = [
+        "append",
+        "extend",
+        "insert",
+        "pop",
+        "remove",
+        "sort",
+        "reverse",
+        "count",
+        "index",
+        "clear",
+        "copy",
+    ]
+    _DICT_METHODS = [
+        "get",
+        "keys",
+        "values",
+        "items",
+        "update",
+        "pop",
+        "setdefault",
+        "clear",
+        "copy",
+    ]
 
     def _member_completions(self, prefix: str):
         """Given the source up to (but not including) the trailing dot,
@@ -653,7 +811,7 @@ class _Server:
         i = len(prefix) - 1
         while i >= 0 and (prefix[i].isalnum() or prefix[i] == "_"):
             i -= 1
-        last = prefix[i + 1:]
+        last = prefix[i + 1 :]
 
         items: list[dict] = []
         known = self._KNOWN_MEMBERS.get(last)
@@ -718,7 +876,7 @@ class _Server:
         end = j + 1
         while j >= 0 and (flat[j].isalnum() or flat[j] == "_"):
             j -= 1
-        fn_name = flat[j + 1:end]
+        fn_name = flat[j + 1 : end]
         if not fn_name:
             return None
 
@@ -769,29 +927,46 @@ class _Server:
     # Tiny built-in signature catalog for the most common cobra4 calls.
     # Each entry: (full label, [{"label": param_str}, ...], optional markdown doc)
     _BUILTIN_SIGS: dict[str, tuple[str, list[dict], Optional[str]]] = {
-        "read":   ("read(target: str | path) -> Any",
-                   [{"label": "target"}],
-                   "Smart-dispatched read. Routes by URI scheme + ext + MIME."),
-        "save":   ("save(value: Any, target: str | path) -> None",
-                   [{"label": "value"}, {"label": "target"}],
-                   "Atomic save. Routes by target ext."),
-        "log":    ("log(msg: str, **kw) -> None",
-                   [{"label": "msg"}, {"label": "**kw"}],
-                   "Structured log. Set `COBRA4_LOG_FORMAT=json` for JSON output."),
-        "fetch":  ("fetch(url: str, method='GET', **kw) -> Response",
-                   [{"label": "url"}, {"label": "method"}, {"label": "**kw"}],
-                   None),
-        "secret": ("secret(path: str) -> str",
-                   [{"label": "path"}],
-                   "Backend selected via `COBRA4_SECRETS_BACKEND`."),
-        "run":    ("run(cmd: str | list, host: Host=None, shell: bool=False) -> CommandResult",
-                   [{"label": "cmd"}, {"label": "host"}, {"label": "shell"}],
-                   "Local subprocess by default; remote SSH when `host=` is given."),
-        "queue":  ("queue(name: str) -> EventSource",
-                   [{"label": "name"}],
-                   "Backend via `COBRA4_QUEUE_BACKEND` (memory/file/sqs/redis)."),
-        "inventory": ("inventory(group_or_glob: str) -> list[Host]",
-                      [{"label": "group_or_glob"}], None),
+        "read": (
+            "read(target: str | path) -> Any",
+            [{"label": "target"}],
+            "Smart-dispatched read. Routes by URI scheme + ext + MIME.",
+        ),
+        "save": (
+            "save(value: Any, target: str | path) -> None",
+            [{"label": "value"}, {"label": "target"}],
+            "Atomic save. Routes by target ext.",
+        ),
+        "log": (
+            "log(msg: str, **kw) -> None",
+            [{"label": "msg"}, {"label": "**kw"}],
+            "Structured log. Set `COBRA4_LOG_FORMAT=json` for JSON output.",
+        ),
+        "fetch": (
+            "fetch(url: str, method='GET', **kw) -> Response",
+            [{"label": "url"}, {"label": "method"}, {"label": "**kw"}],
+            None,
+        ),
+        "secret": (
+            "secret(path: str) -> str",
+            [{"label": "path"}],
+            "Backend selected via `COBRA4_SECRETS_BACKEND`.",
+        ),
+        "run": (
+            "run(cmd: str | list, host: Host=None, shell: bool=False) -> CommandResult",
+            [{"label": "cmd"}, {"label": "host"}, {"label": "shell"}],
+            "Local subprocess by default; remote SSH when `host=` is given.",
+        ),
+        "queue": (
+            "queue(name: str) -> EventSource",
+            [{"label": "name"}],
+            "Backend via `COBRA4_QUEUE_BACKEND` (memory/file/sqs/redis).",
+        ),
+        "inventory": (
+            "inventory(group_or_glob: str) -> list[Host]",
+            [{"label": "group_or_glob"}],
+            None,
+        ),
     }
 
     def _hover_info(self, text: str, line: int, col: int) -> Optional[str]:
@@ -806,7 +981,9 @@ class _Server:
         src_line = lines[line]
         # naive identifier extraction
         start = col
-        while start > 0 and (src_line[start - 1].isalnum() or src_line[start - 1] == "_"):
+        while start > 0 and (
+            src_line[start - 1].isalnum() or src_line[start - 1] == "_"
+        ):
             start -= 1
         end = col
         while end < len(src_line) and (src_line[end].isalnum() or src_line[end] == "_"):

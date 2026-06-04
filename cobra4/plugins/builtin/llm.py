@@ -24,7 +24,6 @@ import re
 from cobra4.plugins.api import LanguagePlugin, register_plugin
 from cobra4.runtime.llm import _c4_llm_run, AgentError, MockProvider, set_provider
 
-
 # Header line, e.g.  `agent customer_support(query: str) -> str {`
 _AGENT_HEADER = re.compile(
     r"agent\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*"
@@ -50,10 +49,10 @@ def _find_agent_blocks(source: str):
             if c == "\\":
                 j += 2
                 continue
-            if source[j:j + 3] in ('"""', "'''"):
-                quote = source[j:j + 3]
+            if source[j : j + 3] in ('"""', "'''"):
+                quote = source[j : j + 3]
                 j += 3
-                while j < len(source) and source[j:j + 3] != quote:
+                while j < len(source) and source[j : j + 3] != quote:
                     if source[j] == "\\":
                         j += 2
                     else:
@@ -87,10 +86,10 @@ def _find_agent_blocks(source: str):
 _FIELD_TOOLS = re.compile(r"(?ms)^\s*tools\s*:\s*(\[[^\]]*\])")
 _FIELD_MODEL = re.compile(r"""(?ms)^\s*model\s*:\s*("[^"]*"|'[^']*')""")
 _FIELD_SYSTEM = re.compile(
-    r'''(?ms)^\s*system\s*:\s*(?P<q>"""|'''  + r"'''" + r'''|"|')(?P<body>.*?)(?P=q)''',
+    r'''(?ms)^\s*system\s*:\s*(?P<q>"""|''' + r"'''" + r"""|"|')(?P<body>.*?)(?P=q)""",
 )
 _FIELD_PROMPT = re.compile(
-    r'''(?ms)^\s*prompt\s*(?P<q>"""|'''  + r"'''" + r'''|"|')(?P<body>.*?)(?P=q)''',
+    r'''(?ms)^\s*prompt\s*(?P<q>"""|''' + r"'''" + r"""|"|')(?P<body>.*?)(?P=q)""",
 )
 _FIELD_MAX_ITERS = re.compile(r"(?m)^\s*max_iters\s*:\s*(\d+)")
 
@@ -98,25 +97,25 @@ _FIELD_MAX_ITERS = re.compile(r"(?m)^\s*max_iters\s*:\s*(\d+)")
 def _extract_fields(body: str) -> dict:
     out: dict = {"system": None, "max_iters": "10"}
 
-    if (m := _FIELD_TOOLS.search(body)):
+    if m := _FIELD_TOOLS.search(body):
         out["tools"] = m.group(1).strip()
     else:
         out["tools"] = "[]"
 
-    if (m := _FIELD_MODEL.search(body)):
+    if m := _FIELD_MODEL.search(body):
         out["model"] = m.group(1).strip()
     else:
         out["model"] = '"claude-sonnet-4-6"'
 
-    if (m := _FIELD_SYSTEM.search(body)):
+    if m := _FIELD_SYSTEM.search(body):
         out["system"] = m.group("body")
 
-    if (m := _FIELD_PROMPT.search(body)):
+    if m := _FIELD_PROMPT.search(body):
         out["prompt"] = m.group("body")
     else:
         out["prompt"] = ""
 
-    if (m := _FIELD_MAX_ITERS.search(body)):
+    if m := _FIELD_MAX_ITERS.search(body):
         out["max_iters"] = m.group(1)
 
     return out
@@ -152,7 +151,8 @@ def _transform(source: str) -> str:
 
         prompt_lit = _quote_for_cobra4(fields["prompt"])
         system_lit = (
-            _quote_for_cobra4(fields["system"]) if fields["system"] is not None
+            _quote_for_cobra4(fields["system"])
+            if fields["system"] is not None
             else "None"
         )
 

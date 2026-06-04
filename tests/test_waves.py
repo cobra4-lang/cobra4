@@ -18,7 +18,6 @@ from cobra4.codegen import generate
 from cobra4.tools.fmt import format_module
 from cobra4.tools.repl import _is_incomplete
 
-
 # ---------- Wave 1: syntax ----------
 
 
@@ -73,6 +72,7 @@ def test_match_guard():
 def test_repl_incomplete_detector():
     """Multi-line REPL keeps reading until braces are balanced."""
     from cobra4.parser import ParseError
+
     err = ParseError(message="...", line=1, column=1)
     assert _is_incomplete(err, "fn foo() {\n")
     assert not _is_incomplete(err, "fn foo() {\n}\n")
@@ -106,10 +106,12 @@ def test_formatter_emits_braces():
 
 def test_regex_plugin_rewrites_literal():
     from cobra4.plugins.builtin import regex as regex_plugin
-    src = '''lang use regex
+
+    src = """lang use regex
 p = re"[a-z]+"i
-'''
+"""
     from cobra4.plugins import preprocess
+
     res = preprocess(src)
     assert "re_compile(" in res.source
     assert "re.IGNORECASE" in res.source
@@ -117,6 +119,7 @@ p = re"[a-z]+"i
 
 def test_regex_plugin_runtime_compiles():
     from cobra4.plugins.builtin.regex import re_compile
+
     p = re_compile("[a-z]+", 0)
     assert p.match("hello")
 
@@ -128,6 +131,7 @@ key: value
 """
 '''
     from cobra4.plugins import preprocess
+
     res = preprocess(src)
     assert "yaml_load(" in res.source
 
@@ -184,7 +188,9 @@ def test_deps_install_venv_uses_project_python(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(subprocess, "call", fake_call)
 
-    rc = cmd_deps(SimpleNamespace(action="install", name=None, version=None, venv=".venv-test"))
+    rc = cmd_deps(
+        SimpleNamespace(action="install", name=None, version=None, venv=".venv-test")
+    )
 
     assert rc == 0
     pip_call = calls[-1][1]
@@ -196,10 +202,10 @@ def test_doc_extracts_signatures():
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / "lib.c4"
         src.write_text(
-            'fn add(a: int, b: int) -> int {\n'
+            "fn add(a: int, b: int) -> int {\n"
             '    "Sum of two integers."\n'
-            '    return a + b\n'
-            '}\n',
+            "    return a + b\n"
+            "}\n",
             encoding="utf-8",
         )
         p = _run_cli("doc", str(src), cwd=d)
@@ -214,8 +220,8 @@ def test_doc_extracts_parameter_defaults():
         src.write_text(
             'fn greet(name, excited=False, punctuation="!") {\n'
             '    "Build a greeting."\n'
-            '    return name + punctuation\n'
-            '}\n',
+            "    return name + punctuation\n"
+            "}\n",
             encoding="utf-8",
         )
         p = _run_cli("doc", str(src), cwd=d)
@@ -236,6 +242,7 @@ def test_stdlib_imports_via_hook():
 
 def test_stdlib_list_modules():
     import cobra4.stdlib as stdlib
+
     mods = stdlib.list_modules()
     assert "http" in mods
     assert "json" in mods
@@ -252,14 +259,18 @@ def test_example_08_stdlib_dogfood_runs():
 
     src_path = PROJECT_ROOT / "examples" / "08_stdlib_dogfood.c4"
     src = src_path.read_text(encoding="utf-8")
-    code = generate(lower(parse(src, source_path=str(src_path))), cobra4_path=str(src_path)).code
+    code = generate(
+        lower(parse(src, source_path=str(src_path))), cobra4_path=str(src_path)
+    ).code
     with tempfile.TemporaryDirectory() as d:
         # Need the examples/ dir to exist relative to cwd for the example
         # to find files via fs.list_dir("examples", "*.c4").
         examples_dir = Path(d) / "examples"
         examples_dir.mkdir()
         for sf in (PROJECT_ROOT / "examples").glob("*.c4"):
-            (examples_dir / sf.name).write_text(sf.read_text(encoding="utf-8"), encoding="utf-8")
+            (examples_dir / sf.name).write_text(
+                sf.read_text(encoding="utf-8"), encoding="utf-8"
+            )
         py = Path(d) / "out.py"
         py.write_text(code, encoding="utf-8")
         env = os.environ.copy()
@@ -277,4 +288,5 @@ def test_example_08_stdlib_dogfood_runs():
 
 def textwrap_dedent(s: str) -> str:
     import textwrap
+
     return textwrap.dedent(s)

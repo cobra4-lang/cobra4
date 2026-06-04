@@ -20,7 +20,6 @@ from cobra4.parser import parse
 from cobra4.plugins.builtin.sql import _find_sql_blocks, _transform as _sql_transform
 from cobra4.runtime import infra as infra_mod
 
-
 # ---------- codegen: dead helper now raises a clean compile error ----------
 
 
@@ -96,8 +95,10 @@ def test_save_state_concurrent_does_not_corrupt(tmp_path: Path) -> None:
 
     t1 = threading.Thread(target=writer, args=("a",))
     t2 = threading.Thread(target=writer, args=("b",))
-    t1.start(); t2.start()
-    t1.join(); t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
     # Whatever the result, the file must parse cleanly.
     data = json.loads(state_path.read_text())
@@ -116,30 +117,27 @@ def test_sql_plugin_handles_braces_inside_string_literal() -> None:
     assert "sql_run(" in out
     # `sql { ... }` should be entirely replaced, no fragments left
     assert "sql {" not in out
-    assert "{\"k\"" in out or "{\\\"k\\\"" in out  # body content preserved
+    assert '{"k"' in out or '{\\"k\\"' in out  # body content preserved
 
 
 def test_sql_plugin_handles_dollar_brace_format_placeholders() -> None:
     """`{name}` interpolation-style strings inside SQL also shouldn't
     break the scanner."""
-    src = 'q = sql { SELECT * FROM users WHERE id = \'{user_id}\' }\n'
+    src = "q = sql { SELECT * FROM users WHERE id = '{user_id}' }\n"
     out = _sql_transform(src)
     assert "sql_run(" in out
     assert "sql {" not in out
 
 
 def test_sql_plugin_handles_multiple_blocks_with_braces() -> None:
-    src = (
-        'a = sql { SELECT 1 WHERE x = \'{foo}\' }\n'
-        'b = sql { SELECT 2 }\n'
-    )
+    src = "a = sql { SELECT 1 WHERE x = '{foo}' }\n" "b = sql { SELECT 2 }\n"
     out = _sql_transform(src)
     sql_run_count = out.count("sql_run(")
     assert sql_run_count == 2
 
 
 def test_find_sql_blocks_returns_correct_spans() -> None:
-    src = 'pre  sql { SELECT 1 }  post\n'
+    src = "pre  sql { SELECT 1 }  post\n"
     blocks = list(_find_sql_blocks(src))
     assert len(blocks) == 1
     start, end, body = blocks[0]
@@ -151,7 +149,7 @@ def test_find_sql_blocks_skips_unmatched_brace_gracefully() -> None:
     """If a `sql {` has no matching `}`, don't loop forever and don't
     emit garbage — leave the source alone so the main parser reports
     the syntax error."""
-    src = 'sql { SELECT 1\n'  # no closing brace
+    src = "sql { SELECT 1\n"  # no closing brace
     blocks = list(_find_sql_blocks(src))
     assert blocks == []
     out = _sql_transform(src)

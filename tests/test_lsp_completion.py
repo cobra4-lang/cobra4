@@ -93,12 +93,12 @@ def test_member_completion_unknown_falls_back_to_common_methods() -> None:
     labels = {i["label"] for i in items}
     # No specific shape registered → suggest common str/list/dict methods.
     assert "append" in labels  # list
-    assert "upper" in labels   # str
-    assert "keys" in labels    # dict
+    assert "upper" in labels  # str
+    assert "keys" in labels  # dict
 
 
 def test_signature_help_user_function() -> None:
-    text = "fn greet(name, age) -> str = \"hi {name}\"\n\ngreet(\n"
+    text = 'fn greet(name, age) -> str = "hi {name}"\n\ngreet(\n'
     s = _server()
     sig = s._signature_help(text, 2, 6)
     assert sig is not None
@@ -107,7 +107,7 @@ def test_signature_help_user_function() -> None:
 
 
 def test_signature_help_active_parameter_advances_with_commas() -> None:
-    text = "fn greet(name, age) = name\n\ngreet(\"ada\", \n"
+    text = 'fn greet(name, age) = name\n\ngreet("ada", \n'
     s = _server()
     sig = s._signature_help(text, 2, 13)
     assert sig is not None

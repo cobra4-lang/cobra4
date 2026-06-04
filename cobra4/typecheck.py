@@ -29,7 +29,6 @@ from typing import Optional
 from cobra4 import ast_nodes as N
 from cobra4.resolver import Diagnostic
 
-
 # ---------- Type representation ----------
 
 
@@ -130,16 +129,16 @@ _BUILTIN_EFFECTS: dict[str, frozenset[str]] = {
     "fetch": frozenset({"http"}),
     "http": frozenset({"http"}),
     # filesystem
-    "read":  frozenset({"fs"}),
-    "save":  frozenset({"fs"}),
+    "read": frozenset({"fs"}),
+    "save": frozenset({"fs"}),
     # observability
-    "log":   frozenset({"log"}),
+    "log": frozenset({"log"}),
     # secrets
     "secret": frozenset({"secret"}),
     # remote command
-    "run":   frozenset({"ssh"}),
+    "run": frozenset({"ssh"}),
     # scheduling / events / time
-    "queue":  frozenset({"time"}),
+    "queue": frozenset({"time"}),
     # deploy
     "deploy": frozenset({"deploy"}),
 }
@@ -171,7 +170,9 @@ class TypeChecker:
             ret = _type_ref_to_t(s.return_type)
             effects = frozenset(s.effects) if s.effects is not None else None
             self.fn_sigs[s.name] = _FnSig(
-                params=params, return_type=ret, effects=effects,
+                params=params,
+                return_type=ret,
+                effects=effects,
             )
 
     # ---------- helpers ----------
@@ -262,7 +263,11 @@ class TypeChecker:
             return {}, {}
 
         # `x is None`, `x is not None`, `x == None`, `x != None`
-        if isinstance(cond, N.Compare) and len(cond.ops) == 1 and len(cond.comparators) == 1:
+        if (
+            isinstance(cond, N.Compare)
+            and len(cond.ops) == 1
+            and len(cond.comparators) == 1
+        ):
             op = cond.ops[0]
             left = cond.left
             right = cond.comparators[0]
@@ -307,15 +312,18 @@ class TypeChecker:
     class _NarrowFrame:
         """Context manager that pushes a narrowed view onto var_types and
         restores the original on exit. ``None`` is a passthrough."""
+
         def __init__(self, owner: "TypeChecker", facts: dict[str, C4Type]) -> None:
             self.owner = owner
             self.facts = facts
             self.saved: dict[str, Optional[C4Type]] = {}
+
         def __enter__(self):
             for name, t in self.facts.items():
                 self.saved[name] = self.owner.var_types.get(name)
                 self.owner.var_types[name] = t
             return self
+
         def __exit__(self, *exc):
             for name, prev in self.saved.items():
                 if prev is None:
@@ -593,7 +601,9 @@ class TypeChecker:
 def _type_ref_to_t(t: Optional[N.TypeRef]) -> C4Type:
     if t is None:
         return ANY_T
-    return C4Type(name=t.name, args=tuple(_type_ref_to_t(a) for a in t.args), optional=t.optional)
+    return C4Type(
+        name=t.name, args=tuple(_type_ref_to_t(a) for a in t.args), optional=t.optional
+    )
 
 
 def check(module: N.Module) -> list[Diagnostic]:

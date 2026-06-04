@@ -54,6 +54,7 @@ class Stream:
                 if inspect.isawaitable(r):
                     r = await r
                 yield r
+
         return Stream(gen())
 
     def filter(self, pred: Callable[[Any], Any]) -> "Stream":
@@ -64,6 +65,7 @@ class Stream:
                     r = await r
                 if r:
                     yield x
+
         return Stream(gen())
 
     def take(self, n: int) -> "Stream":
@@ -74,6 +76,7 @@ class Stream:
                     break
                 yield x
                 i += 1
+
         return Stream(gen())
 
     def window(
@@ -114,6 +117,7 @@ class Stream:
                     buf = []
             if buf:
                 yield buf
+
         return Stream(gen())
 
     def _window_tumbling(self, seconds: float) -> "Stream":
@@ -129,6 +133,7 @@ class Stream:
                     window_start = now
             if buf:
                 yield buf
+
         return Stream(gen())
 
     def _window_sliding(self, length: float, step: float) -> "Stream":
@@ -148,6 +153,7 @@ class Stream:
             # Final window flush
             if items:
                 yield [v for _, v in items]
+
         return Stream(gen())
 
     # ----- terminal operators -----
@@ -175,9 +181,11 @@ def from_async(source: AsyncIterator[Any]) -> Stream:
 
 def from_iter(source: Iterable[Any]) -> Stream:
     """Wrap a synchronous iterable as a trivial async :class:`Stream`."""
+
     async def gen() -> AsyncIterator[Any]:
         for x in source:
             yield x
+
     return Stream(gen())
 
 
@@ -199,6 +207,7 @@ def from_queue(name: str, *, timeout: float = 0.1) -> Stream:
                 await asyncio.sleep(0)
                 continue
             yield ev
+
     return Stream(gen())
 
 

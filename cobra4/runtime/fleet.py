@@ -36,7 +36,6 @@ from typing import Any, Optional
 
 from cobra4.runtime.smart import SmartFn, make_smart
 
-
 # ---------- Host ----------
 
 
@@ -121,7 +120,9 @@ def inventory(pattern: str = "all") -> list[Host]:
     - glob over host names (e.g. ``"prod-*"``, ``"web?"``) → matching.
     """
     inv = _load_inventory()
-    hosts: dict[str, Host] = {n: _build_host(n, spec) for n, spec in inv["hosts"].items()}
+    hosts: dict[str, Host] = {
+        n: _build_host(n, spec) for n, spec in inv["hosts"].items()
+    }
 
     if pattern == "all":
         return list(hosts.values())
@@ -181,11 +182,17 @@ def _run_local(
     Don't pass user-supplied content through it.
     """
     h = host or Host(name="local", addr="localhost")
-    cmd_str = cmd if isinstance(cmd, str) else " ".join(shlex.quote(str(c)) for c in cmd)
+    cmd_str = (
+        cmd if isinstance(cmd, str) else " ".join(shlex.quote(str(c)) for c in cmd)
+    )
     if shell:
         argv = cmd_str
     else:
-        argv = cmd if isinstance(cmd, list) else shlex.split(cmd_str, posix=(os.name != "nt"))
+        argv = (
+            cmd
+            if isinstance(cmd, list)
+            else shlex.split(cmd_str, posix=(os.name != "nt"))
+        )
     proc = subprocess.run(
         argv,
         shell=shell,
@@ -194,7 +201,11 @@ def _run_local(
         timeout=timeout,
     )
     return CommandResult(
-        cmd=cmd_str, host=h, stdout=proc.stdout, stderr=proc.stderr, returncode=proc.returncode
+        cmd=cmd_str,
+        host=h,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        returncode=proc.returncode,
     )
 
 
@@ -206,6 +217,7 @@ def _run_ssh(cmd: str, *, host: Host, timeout: float = 60.0) -> CommandResult:
     """
     try:
         import paramiko  # type: ignore
+
         return _run_paramiko(cmd, host=host, timeout=timeout, paramiko=paramiko)
     except ImportError:
         pass
@@ -218,7 +230,11 @@ def _run_ssh(cmd: str, *, host: Host, timeout: float = 60.0) -> CommandResult:
         timeout=timeout,
     )
     return CommandResult(
-        cmd=cmd, host=host, stdout=proc.stdout, stderr=proc.stderr, returncode=proc.returncode
+        cmd=cmd,
+        host=host,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        returncode=proc.returncode,
     )
 
 
@@ -269,7 +285,9 @@ def _run_paramiko(cmd: str, *, host: Host, timeout: float, paramiko) -> CommandR
         client.close()
 
 
-def copy_to_host(local_path: str, remote_path: str, *, host: Host, timeout: float = 60.0) -> bool:
+def copy_to_host(
+    local_path: str, remote_path: str, *, host: Host, timeout: float = 60.0
+) -> bool:
     """Copy a local file to ``remote_path`` on ``host`` via SFTP (paramiko).
 
     Returns ``True`` on success. Falls back to ``scp`` if paramiko is missing.
@@ -282,13 +300,19 @@ def copy_to_host(local_path: str, remote_path: str, *, host: Host, timeout: floa
         return subprocess.run(full, timeout=timeout).returncode == 0
     client = paramiko.SSHClient()
     client.load_system_host_keys()
-    policy_name = (host.extra.get("host_key_policy") or os.environ.get("COBRA4_SSH_HOST_KEY_POLICY") or "strict").lower()
+    policy_name = (
+        host.extra.get("host_key_policy")
+        or os.environ.get("COBRA4_SSH_HOST_KEY_POLICY")
+        or "strict"
+    ).lower()
     if policy_name == "auto":
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     else:
         client.set_missing_host_key_policy(paramiko.RejectPolicy())
     try:
-        client.connect(hostname=host.addr, port=host.port, username=host.user, timeout=timeout)
+        client.connect(
+            hostname=host.addr, port=host.port, username=host.user, timeout=timeout
+        )
         with client.open_sftp() as sftp:
             sftp.put(local_path, remote_path)
         return True
@@ -296,7 +320,9 @@ def copy_to_host(local_path: str, remote_path: str, *, host: Host, timeout: floa
         client.close()
 
 
-def _run_default(cmd: Any, *, host: Optional[Host] = None, **kwargs: Any) -> CommandResult:
+def _run_default(
+    cmd: Any, *, host: Optional[Host] = None, **kwargs: Any
+) -> CommandResult:
     """Default ``run``: takes a string command, runs locally."""
     if isinstance(cmd, list):
         cmd = " ".join(shlex.quote(str(c)) for c in cmd)

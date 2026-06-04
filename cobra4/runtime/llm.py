@@ -27,7 +27,6 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-
 # ---------- public types ----------
 
 
@@ -53,6 +52,7 @@ class Response:
     - ``stop`` with final ``text``, or
     - ``tool_use`` with ``tool_calls`` to execute and continue the loop.
     """
+
     kind: str  # "stop" | "tool_use"
     text: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
@@ -92,10 +92,14 @@ class MockProvider(LLMProvider):
         return list(self._call_log)
 
     async def turn(self, *, model, system, messages, tools) -> Response:
-        self._call_log.append({
-            "model": model, "system": system,
-            "messages": list(messages), "tools": list(tools),
-        })
+        self._call_log.append(
+            {
+                "model": model,
+                "system": system,
+                "messages": list(messages),
+                "tools": list(tools),
+            }
+        )
         if not self._scripted:
             raise AgentError(
                 "MockProvider exhausted — script ran out of responses",
@@ -139,11 +143,13 @@ class AnthropicProvider(LLMProvider):
             calls: list[ToolCall] = []
             for block in resp.content:
                 if getattr(block, "type", None) == "tool_use":
-                    calls.append(ToolCall(
-                        name=block.name,
-                        arguments=block.input or {},
-                        tool_use_id=block.id,
-                    ))
+                    calls.append(
+                        ToolCall(
+                            name=block.name,
+                            arguments=block.input or {},
+                            tool_use_id=block.id,
+                        )
+                    )
             return Response(kind="tool_use", tool_calls=calls)
 
         text = ""
@@ -205,12 +211,18 @@ def _python_type_to_json_schema(t: Any) -> str:
     if isinstance(t, str):
         bare = t.split("[")[0].strip().lower()
         return {
-            "int": "integer", "integer": "integer",
-            "float": "number", "number": "number",
-            "bool": "boolean", "boolean": "boolean",
-            "list": "array", "tuple": "array",
-            "dict": "object", "object": "object",
-            "str": "string", "string": "string",
+            "int": "integer",
+            "integer": "integer",
+            "float": "number",
+            "number": "number",
+            "bool": "boolean",
+            "boolean": "boolean",
+            "list": "array",
+            "tuple": "array",
+            "dict": "object",
+            "object": "object",
+            "str": "string",
+            "string": "string",
         }.get(bare, "string")
     if t in (int,):
         return "integer"
@@ -257,8 +269,10 @@ async def _c4_llm_run(
     for iteration in range(max_iters):
         try:
             resp = await provider.turn(
-                model=model, system=system,
-                messages=messages, tools=tool_schemas,
+                model=model,
+                system=system,
+                messages=messages,
+                tools=tool_schemas,
             )
         except AgentError:
             raise
@@ -273,40 +287,53 @@ async def _c4_llm_run(
 
         # tool_use: append assistant response, execute each tool,
         # append the tool_result, and continue.
-        messages.append({
-            "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": tc.tool_use_id, "name": tc.name, "input": tc.arguments}
-                for tc in resp.tool_calls
-            ],
-        })
+        messages.append(
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": tc.tool_use_id,
+                        "name": tc.name,
+                        "input": tc.arguments,
+                    }
+                    for tc in resp.tool_calls
+                ],
+            }
+        )
         results: list[dict] = []
         for tc in resp.tool_calls:
             fn = tool_by_name.get(tc.name)
             if fn is None:
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tc.tool_use_id,
-                    "is_error": True,
-                    "content": f"unknown tool: {tc.name}",
-                })
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tc.tool_use_id,
+                        "is_error": True,
+                        "content": f"unknown tool: {tc.name}",
+                    }
+                )
                 continue
             try:
                 out = fn(**tc.arguments)
                 if inspect.isawaitable(out):
                     out = await out
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tc.tool_use_id,
-                    "content": json.dumps(out) if not isinstance(out, str) else out,
-                })
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tc.tool_use_id,
+                        "content": json.dumps(out) if not isinstance(out, str) else out,
+                    }
+                )
             except Exception as tool_exc:  # noqa: BLE001
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tc.tool_use_id,
-                    "is_error": True,
-                    "content": f"{type(tool_exc).__name__}: {tool_exc}",
-                })
+                results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tc.tool_use_id,
+                        "is_error": True,
+                        "content": f"{type(tool_exc).__name__}: {tool_exc}",
+                    }
+                )
         messages.append({"role": "user", "content": results})
 
     raise AgentError(

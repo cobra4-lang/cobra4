@@ -8,14 +8,15 @@ import sys
 import textwrap
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _run_c4_test(tmp_path: Path, src: str) -> subprocess.CompletedProcess:
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
-    (tests_dir / "test_sample.c4").write_text(textwrap.dedent(src).lstrip(), encoding="utf-8")
+    (tests_dir / "test_sample.c4").write_text(
+        textwrap.dedent(src).lstrip(), encoding="utf-8"
+    )
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     return subprocess.run(

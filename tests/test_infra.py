@@ -36,8 +36,8 @@ def _clear_registry():
 def test_parse_resource_decl_keeps_adapter_path() -> None:
     m = parse(
         "resource hello = local.file {\n"
-        "    path: \"./x.json\"\n"
-        "    contents: {\"a\": 1}\n"
+        '    path: "./x.json"\n'
+        '    contents: {"a": 1}\n'
         "}\n"
     )
     r = m.body[0]
@@ -48,18 +48,14 @@ def test_parse_resource_decl_keeps_adapter_path() -> None:
 
 
 def test_parse_resource_with_dotted_adapter_path() -> None:
-    m = parse(
-        "resource api = aws.lambda {\n"
-        "    name: \"my-fn\"\n"
-        "}\n"
-    )
+    m = parse("resource api = aws.lambda {\n" '    name: "my-fn"\n' "}\n")
     assert m.body[0].adapter_path == "aws.lambda"
 
 
 def test_parse_resource_field_can_reference_other_resource() -> None:
     """Cross-references parse fine — semantic check happens at apply."""
     m = parse(
-        "resource a = local.file { path: \"./a.json\" }\n"
+        'resource a = local.file { path: "./a.json" }\n'
         "resource b = local.file { path: a.path }\n"
     )
     assert len(m.body) == 2
@@ -70,9 +66,7 @@ def test_parse_resource_field_can_reference_other_resource() -> None:
 
 
 def test_codegen_emits_declare_resource_call() -> None:
-    out = generate(parse(
-        "resource hello = local.file { path: \"./x.json\" }\n"
-    )).code
+    out = generate(parse('resource hello = local.file { path: "./x.json" }\n')).code
     assert "_c4_infra.declare_resource" in out
     assert "'local.file'" in out
     assert "'hello'" in out
@@ -85,7 +79,8 @@ def test_apply_creates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "out.json"
     infra_mod.declare_resource(
-        "hello", "local.file",
+        "hello",
+        "local.file",
         lambda: {"path": str(target), "contents": {"hi": 1}},
     )
     infra_mod.apply()
@@ -97,7 +92,8 @@ def test_apply_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "out.json"
     infra_mod.declare_resource(
-        "hello", "local.file",
+        "hello",
+        "local.file",
         lambda: {"path": str(target), "contents": {"a": 1}},
     )
     infra_mod.apply()
@@ -118,7 +114,7 @@ def test_apply_detects_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         return {"path": str(target), "contents": {"version": counter["n"]}}
 
     infra_mod.declare_resource("hello", "local.file", fields)
-    infra_mod.apply()    # version=1 written, state stored
+    infra_mod.apply()  # version=1 written, state stored
 
     # Second apply re-runs fields_fn -> version=2, plan should see UPDATE
     actions = infra_mod.plan()
@@ -127,12 +123,14 @@ def test_apply_detects_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_destroy_removes_file_and_clears_state(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "out.json"
     infra_mod.declare_resource(
-        "hello", "local.file",
+        "hello",
+        "local.file",
         lambda: {"path": str(target), "contents": "x"},
     )
     infra_mod.apply()
@@ -144,12 +142,14 @@ def test_destroy_removes_file_and_clears_state(
 
 
 def test_resource_attribute_access_returns_state_field(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "out.json"
     r = infra_mod.declare_resource(
-        "hello", "local.file",
+        "hello",
+        "local.file",
         lambda: {"path": str(target), "contents": "x"},
     )
     infra_mod.apply()
@@ -158,12 +158,14 @@ def test_resource_attribute_access_returns_state_field(
 
 
 def test_resource_unknown_attribute_raises_attributeerror(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     target = tmp_path / "out.json"
     r = infra_mod.declare_resource(
-        "hello", "local.file",
+        "hello",
+        "local.file",
         lambda: {"path": str(target), "contents": "x"},
     )
     infra_mod.apply()
@@ -172,11 +174,14 @@ def test_resource_unknown_attribute_raises_attributeerror(
 
 
 def test_unknown_adapter_raises_at_phase_time(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     infra_mod.declare_resource(
-        "x", "totally.fake", lambda: {"foo": "bar"},
+        "x",
+        "totally.fake",
+        lambda: {"foo": "bar"},
     )
     with pytest.raises(infra_mod.InfraError, match="Unknown infra adapter"):
         infra_mod.plan()
@@ -186,12 +191,15 @@ def test_register_custom_adapter() -> None:
     class _Spy:
         def __init__(self):
             self.calls = []
+
         def plan(self, current, desired):
             self.calls.append(("plan", current, desired))
             return infra_mod.Action(kind="noop")
+
         def apply(self, current, desired):
             self.calls.append(("apply", current, desired))
             return desired
+
         def destroy(self, current):
             self.calls.append(("destroy", current))
 
@@ -208,7 +216,9 @@ def test_register_custom_adapter() -> None:
 def _run_c4(args: list[str], cwd: Path) -> tuple[int, str]:
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", *args],
-        capture_output=True, text=True, cwd=cwd,
+        capture_output=True,
+        text=True,
+        cwd=cwd,
     )
     return proc.returncode, proc.stdout + "\n" + proc.stderr
 
@@ -216,14 +226,14 @@ def _run_c4(args: list[str], cwd: Path) -> tuple[int, str]:
 def test_e2e_apply_creates_files_with_cross_reference(tmp_path: Path) -> None:
     src = tmp_path / "infra.c4"
     src.write_text(
-        'resource hello = local.file {\n'
+        "resource hello = local.file {\n"
         '    path: "./greetings.json"\n'
         '    contents: {"hi": 1}\n'
-        '}\n'
-        'resource downstream = local.file {\n'
+        "}\n"
+        "resource downstream = local.file {\n"
         '    path: "./derived.txt"\n'
         '    contents: "based on: {hello.path}"\n'
-        '}\n'
+        "}\n"
     )
     code, out = _run_c4(["infra", "apply", str(src)], tmp_path)
     assert code == 0, out
@@ -235,10 +245,10 @@ def test_e2e_apply_creates_files_with_cross_reference(tmp_path: Path) -> None:
 def test_e2e_plan_then_apply_then_plan_noop(tmp_path: Path) -> None:
     src = tmp_path / "infra.c4"
     src.write_text(
-        'resource hello = local.file {\n'
+        "resource hello = local.file {\n"
         '    path: "./hi.txt"\n'
         '    contents: "hello"\n'
-        '}\n'
+        "}\n"
     )
     code, _ = _run_c4(["infra", "apply", str(src)], tmp_path)
     assert code == 0
@@ -250,10 +260,10 @@ def test_e2e_plan_then_apply_then_plan_noop(tmp_path: Path) -> None:
 def test_e2e_destroy_removes_managed_files(tmp_path: Path) -> None:
     src = tmp_path / "infra.c4"
     src.write_text(
-        'resource hello = local.file {\n'
+        "resource hello = local.file {\n"
         '    path: "./bye.txt"\n'
         '    contents: "x"\n'
-        '}\n'
+        "}\n"
     )
     _run_c4(["infra", "apply", str(src)], tmp_path)
     assert (tmp_path / "bye.txt").exists()

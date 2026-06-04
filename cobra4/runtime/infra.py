@@ -30,7 +30,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-
 # ---------- public types ----------
 
 
@@ -56,7 +55,10 @@ class Resource:
     __slots__ = ("name", "adapter_path", "fields_fn", "state")
 
     def __init__(
-        self, name: str, adapter_path: str, fields_fn: Callable[[], dict[str, Any]],
+        self,
+        name: str,
+        adapter_path: str,
+        fields_fn: Callable[[], dict[str, Any]],
     ) -> None:
         self.name = name
         self.adapter_path = adapter_path
@@ -104,7 +106,9 @@ _REGISTRY: list[Resource] = []
 
 
 def declare_resource(
-    name: str, adapter_path: str, fields_fn: Callable[[], dict[str, Any]],
+    name: str,
+    adapter_path: str,
+    fields_fn: Callable[[], dict[str, Any]],
 ) -> Resource:
     res = Resource(name=name, adapter_path=adapter_path, fields_fn=fields_fn)
     _REGISTRY.append(res)
@@ -141,6 +145,7 @@ def save_state(state: dict[str, dict[str, Any]], path: Optional[Path] = None) ->
     the new state, never a half-written file (which would break every
     subsequent ``plan`` / ``apply`` until manually fixed)."""
     import threading
+
     p = path or _default_state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(state, indent=2, sort_keys=True)
@@ -189,7 +194,7 @@ def apply(state_path: Optional[Path] = None) -> dict[str, dict[str, Any]]:
     new_state = dict(state)
     for r in _REGISTRY:
         adapter = get_adapter(r.adapter_path)
-        desired = r.fields_fn()       # may reference earlier r.state via __getattr__
+        desired = r.fields_fn()  # may reference earlier r.state via __getattr__
         current = state.get(r.name, {})
         result = adapter.apply(current, desired) or {}
         r.state = result
@@ -243,7 +248,7 @@ class _LocalFileAdapter:
         elif isinstance(contents, bytes):
             path.write_bytes(contents)
             return {
-                "path": path_str,           # preserve user-typed path verbatim
+                "path": path_str,  # preserve user-typed path verbatim
                 "contents": list(contents),
                 "size": path.stat().st_size,
             }
@@ -251,7 +256,7 @@ class _LocalFileAdapter:
             payload = str(contents)
         path.write_text(payload)
         return {
-            "path": path_str,               # preserve user-typed path verbatim
+            "path": path_str,  # preserve user-typed path verbatim
             "contents": contents,
             "size": path.stat().st_size,
         }
@@ -273,7 +278,6 @@ register_adapter("local.file", _LocalFileAdapter())
 # lazy — adapters delegate to mocks when their backend isn't available.
 from cobra4.runtime import infra_aws as _aws_adapters  # noqa: E402, F401
 from cobra4.runtime import infra_k8s as _k8s_adapters  # noqa: E402, F401
-
 
 __all__ = [
     "Resource",

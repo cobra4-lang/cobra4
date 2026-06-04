@@ -17,8 +17,12 @@ import pytest
 
 from cobra4.runtime import infra as infra_mod
 from cobra4.runtime.infra_aws import (
-    S3Adapter, LambdaAdapter, _MockS3, _MockLambda,
-    set_test_clients, reset_test_clients,
+    S3Adapter,
+    LambdaAdapter,
+    _MockS3,
+    _MockLambda,
+    set_test_clients,
+    reset_test_clients,
 )
 
 
@@ -107,7 +111,9 @@ def test_s3_destroy_removes_bucket(_clear_state) -> None:
 # ---------- aws.lambda ----------
 
 
-def _make_zip(tmp: Path, contents: bytes = b"def handler(event, context):\n    return event\n") -> Path:
+def _make_zip(
+    tmp: Path, contents: bytes = b"def handler(event, context):\n    return event\n"
+) -> Path:
     """Build a minimal lambda zip for the adapter to read."""
     z = tmp / "fn.zip"
     with zipfile.ZipFile(z, "w") as zf:
@@ -117,10 +123,15 @@ def _make_zip(tmp: Path, contents: bytes = b"def handler(event, context):\n    r
 
 def test_lambda_plan_create_for_new_function(tmp_path: Path) -> None:
     a = LambdaAdapter()
-    plan = a.plan(current={}, desired={
-        "name": "my-fn", "handler": "handler.main",
-        "role": "arn:aws:iam::1:role/x", "runtime": "python3.12",
-    })
+    plan = a.plan(
+        current={},
+        desired={
+            "name": "my-fn",
+            "handler": "handler.main",
+            "role": "arn:aws:iam::1:role/x",
+            "runtime": "python3.12",
+        },
+    )
     assert plan.kind == "create"
 
 
@@ -139,8 +150,12 @@ def test_lambda_apply_creates_then_idempotent(_clear_state, tmp_path: Path) -> N
     z = _make_zip(tmp_path)
     a = LambdaAdapter()
     desired = {
-        "name": "fn1", "handler": "handler.main", "role": "arn:1",
-        "zip_path": str(z), "memory": 512, "timeout": 30,
+        "name": "fn1",
+        "handler": "handler.main",
+        "role": "arn:1",
+        "zip_path": str(z),
+        "memory": 512,
+        "timeout": 30,
     }
     result = a.apply({}, desired)
     assert result["name"] == "fn1"
@@ -165,11 +180,19 @@ def test_lambda_apply_includes_env_vars(_clear_state, tmp_path: Path) -> None:
     _, lam = _clear_state
     z = _make_zip(tmp_path)
     a = LambdaAdapter()
-    a.apply({}, {
-        "name": "envfn", "handler": "h.main", "role": "arn:1",
-        "zip_path": str(z), "env": {"DB_URL": "postgres://..."},
-    })
-    create_call = [c for c in lam.calls if c[0] == "create_function" and c[1] == "envfn"]
+    a.apply(
+        {},
+        {
+            "name": "envfn",
+            "handler": "h.main",
+            "role": "arn:1",
+            "zip_path": str(z),
+            "env": {"DB_URL": "postgres://..."},
+        },
+    )
+    create_call = [
+        c for c in lam.calls if c[0] == "create_function" and c[1] == "envfn"
+    ]
     assert create_call
     assert lam.functions["envfn"]["FunctionName"] == "envfn"
 
@@ -180,7 +203,9 @@ def test_lambda_apply_includes_env_vars(_clear_state, tmp_path: Path) -> None:
 def _run_c4(args: list[str], cwd: Path) -> tuple[int, str]:
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", *args],
-        capture_output=True, text=True, cwd=cwd,
+        capture_output=True,
+        text=True,
+        cwd=cwd,
     )
     return proc.returncode, proc.stdout + "\n" + proc.stderr
 
@@ -188,11 +213,11 @@ def _run_c4(args: list[str], cwd: Path) -> tuple[int, str]:
 def test_e2e_s3_apply_via_c4_infra(tmp_path: Path) -> None:
     src = tmp_path / "infra.c4"
     src.write_text(
-        'resource bucket = aws.s3 {\n'
+        "resource bucket = aws.s3 {\n"
         '    name: "demo-bucket"\n'
         '    region: "eu-west-1"\n'
         '    tags: {"team": "data"}\n'
-        '}\n'
+        "}\n"
     )
     code, out = _run_c4(["infra", "apply", str(src)], tmp_path)
     assert code == 0, out
@@ -203,10 +228,10 @@ def test_e2e_s3_apply_via_c4_infra(tmp_path: Path) -> None:
 def test_e2e_s3_plan_then_apply_then_plan_noop(tmp_path: Path) -> None:
     src = tmp_path / "infra.c4"
     src.write_text(
-        'resource bucket = aws.s3 {\n'
+        "resource bucket = aws.s3 {\n"
         '    name: "idempotent-test"\n'
         '    region: "us-east-1"\n'
-        '}\n'
+        "}\n"
     )
     code, _ = _run_c4(["infra", "apply", str(src)], tmp_path)
     assert code == 0

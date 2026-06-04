@@ -28,7 +28,6 @@ from typing import Optional
 from cobra4 import ast_nodes as N
 from cobra4.resolver import Diagnostic
 
-
 _DISPATCH_KWS = ("scheme", "ext", "type", "mime", "priority", "when")
 
 
@@ -78,12 +77,12 @@ def analyze(module: N.Module) -> list[Diagnostic]:
                     )
                 )
                 for i, a in enumerate(dups):
-                    for b in dups[i + 1:]:
+                    for b in dups[i + 1 :]:
                         flagged_pairs.add(_pair(id(a), id(b)))
 
         # 2. Specificity overlap — same priority, one strictly subsumes another.
         for i, a in enumerate(group):
-            for b in group[i + 1:]:
+            for b in group[i + 1 :]:
                 if _pair(id(a), id(b)) in flagged_pairs:
                     continue
                 if a.key.priority != b.key.priority:
@@ -96,9 +95,11 @@ def analyze(module: N.Module) -> list[Diagnostic]:
                 if more_general.has_custom and more_specific.has_custom:
                     note = "both use `when=`; runtime order will decide"
                 else:
-                    note = ("more general handler outranks the specific one "
-                            "only by registration order — bump priority on "
-                            "the specific handler to make intent explicit")
+                    note = (
+                        "more general handler outranks the specific one "
+                        "only by registration order — bump priority on "
+                        "the specific handler to make intent explicit"
+                    )
                 diagnostics.append(
                     Diagnostic(
                         "warning",
@@ -241,7 +242,14 @@ def _maybe_extract_register(e: Optional[N.Expr]) -> Optional[_Registration]:
             mime = v
         elif a.name == "priority" and isinstance(v, int):
             priority = v
-    key = _RegKey(scheme=scheme, ext=ext, type_=type_, mime=mime, priority=priority, has_custom=has_custom)
+    key = _RegKey(
+        scheme=scheme,
+        ext=ext,
+        type_=type_,
+        mime=mime,
+        priority=priority,
+        has_custom=has_custom,
+    )
     return _Registration(fn_name=fn_name, key=key, loc=e.loc)
 
 

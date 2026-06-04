@@ -25,7 +25,6 @@ from typing import Any, Optional
 
 from cobra4.runtime.infra import Action, InfraError, register_adapter
 
-
 # ---------- kubectl invocation ----------
 
 
@@ -57,7 +56,10 @@ class _RealKubectl:
         if namespace:
             args += ["-n", namespace]
         result = subprocess.run(
-            args, input=manifest_yaml, capture_output=True, text=True,
+            args,
+            input=manifest_yaml,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             raise InfraError(f"kubectl apply failed: {result.stderr.strip()}")
@@ -170,5 +172,6 @@ register_adapter("k8s.deployment", K8sDeploymentAdapter())
 
 __all__ = [
     "K8sDeploymentAdapter",
-    "set_test_runner", "reset_test_runner",
+    "set_test_runner",
+    "reset_test_runner",
 ]

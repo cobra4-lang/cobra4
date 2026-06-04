@@ -20,14 +20,15 @@ from cobra4.codegen import generate
 from cobra4.lowering import lower
 from cobra4.parser import parse
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = PROJECT_ROOT / "examples"
 
 
 def _transpile(c4_path: Path) -> str:
     src = c4_path.read_text(encoding="utf-8")
-    return generate(lower(parse(src, source_path=str(c4_path))), cobra4_path=str(c4_path)).code
+    return generate(
+        lower(parse(src, source_path=str(c4_path))), cobra4_path=str(c4_path)
+    ).code
 
 
 def _run_example(c4_path: Path, cwd: Path) -> int:
@@ -62,7 +63,9 @@ def _run_example(c4_path: Path, cwd: Path) -> int:
 def test_example_01_wordcount():
     with tempfile.TemporaryDirectory() as d:
         # Provide a README.md the example can read.
-        (Path(d) / "README.md").write_text("hello world hello world cobra4 rocks\n", encoding="utf-8")
+        (Path(d) / "README.md").write_text(
+            "hello world hello world cobra4 rocks\n", encoding="utf-8"
+        )
         assert _run_example(EXAMPLES / "01_wordcount.c4", Path(d)) == 0
         assert (Path(d) / "out_wordcount.json").exists()
 
@@ -101,7 +104,13 @@ def test_example_09_log_analyzer_runs_via_cli():
         env = os.environ.copy()
         env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
         proc = subprocess.run(
-            [sys.executable, "-m", "cobra4.cli", "run", str(EXAMPLES / "09_log_analyzer.c4")],
+            [
+                sys.executable,
+                "-m",
+                "cobra4.cli",
+                "run",
+                str(EXAMPLES / "09_log_analyzer.c4"),
+            ],
             cwd=d,
             env=env,
             capture_output=True,

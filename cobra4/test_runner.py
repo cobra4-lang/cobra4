@@ -90,7 +90,8 @@ def _compile_test_file(path: Path) -> CompiledTestFile:
     pre = preprocess(src)
     module = parse(pre.source, source_path=str(path))
     test_names = sorted(
-        s.name for s in module.body
+        s.name
+        for s in module.body
         if isinstance(s, N.FnDecl)
         and s.name.startswith("test_")
         and not s.name.startswith("test__")
@@ -100,7 +101,8 @@ def _compile_test_file(path: Path) -> CompiledTestFile:
     if pre.plugins:
         plugin_imports = "\n".join(
             f"from {p.runtime_module} import *  # plugin: {p.name}"
-            for p in pre.plugins if p.runtime_module
+            for p in pre.plugins
+            if p.runtime_module
         )
         if plugin_imports:
             py_src = plugin_imports + "\n" + py_src
@@ -130,11 +132,15 @@ def _exec_compiled(compiled: CompiledTestFile) -> dict[str, Any]:
     return ns
 
 
-_FRAME_RE = re.compile(r'^(?P<prefix>\s*File ")(?P<file>[^"]+)(", line )(?P<line>\d+)(?P<rest>.*)$')
+_FRAME_RE = re.compile(
+    r'^(?P<prefix>\s*File ")(?P<file>[^"]+)(", line )(?P<line>\d+)(?P<rest>.*)$'
+)
 
 
 def _format_traceback(exc: BaseException, compiled: CompiledTestFile) -> str:
-    raw = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).splitlines()
+    raw = "".join(
+        traceback.format_exception(type(exc), exc, exc.__traceback__)
+    ).splitlines()
     out: list[str] = []
     i = 0
     test_path = str(compiled.path)
@@ -144,7 +150,11 @@ def _format_traceback(exc: BaseException, compiled: CompiledTestFile) -> str:
 
     def skip_frame_body(idx: int) -> int:
         idx += 1
-        while idx < len(raw) and not is_frame_header(raw[idx]) and raw[idx].startswith(" "):
+        while (
+            idx < len(raw)
+            and not is_frame_header(raw[idx])
+            and raw[idx].startswith(" ")
+        ):
             idx += 1
         return idx
 
@@ -158,12 +168,16 @@ def _format_traceback(exc: BaseException, compiled: CompiledTestFile) -> str:
                 c4_line, c4_col = compiled.source_map.lookup_position(py_line, 0)
                 if c4_line:
                     pos = f"{c4_line}" if c4_col == 0 else f"{c4_line}:{c4_col}"
-                    out.append(f'{m.group("prefix")}{test_path}", line {pos}{m.group("rest")}')
+                    out.append(
+                        f'{m.group("prefix")}{test_path}", line {pos}{m.group("rest")}'
+                    )
                     if 0 < c4_line <= len(compiled.source_lines):
                         out.append("    " + compiled.source_lines[c4_line - 1].strip())
                     i = skip_frame_body(i)
                     continue
-            if filename.endswith("/cobra4/test_runner.py") or filename.endswith("/cobra4/stdlib/test.c4"):
+            if filename.endswith("/cobra4/test_runner.py") or filename.endswith(
+                "/cobra4/stdlib/test.c4"
+            ):
                 i = skip_frame_body(i)
                 continue
         out.append(line)
@@ -182,7 +196,11 @@ def _failure_result(
     prefix: str = "",
 ) -> TestResult:
     error_message = f"{prefix}{type(exc).__name__}: {exc}"
-    trace = _format_traceback(exc, compiled) if compiled is not None else traceback.format_exc()
+    trace = (
+        _format_traceback(exc, compiled)
+        if compiled is not None
+        else traceback.format_exc()
+    )
     return TestResult(
         file=str(path),
         name=name,
@@ -201,7 +219,9 @@ def _run_single_test(compiled: CompiledTestFile, name: str) -> TestResult:
         teardown = ns.get("teardown")
         fn = ns[name]
     except BaseException as e:  # noqa: BLE001
-        return _failure_result(compiled.path, name, start, e, compiled, prefix="import ")
+        return _failure_result(
+            compiled.path, name, start, e, compiled, prefix="import "
+        )
 
     failure: Optional[TestResult] = None
     try:
@@ -247,27 +267,33 @@ def run_file(path: Path) -> list[TestResult]:
     try:
         compiled = _compile_test_file(path)
     except (ParseError, SyntaxError, ValueError) as e:
-        return [TestResult(
-            file=str(path),
-            name="<compile>",
-            passed=False,
-            duration_ms=0.0,
-            error_message=str(e),
-        )]
+        return [
+            TestResult(
+                file=str(path),
+                name="<compile>",
+                passed=False,
+                duration_ms=0.0,
+                error_message=str(e),
+            )
+        ]
     except BaseException as e:  # noqa: BLE001 — module-level exec failure
-        return [TestResult(
-            file=str(path),
-            name="<import>",
-            passed=False,
-            duration_ms=0.0,
-            error_message=str(e),
-            error_trace=traceback.format_exc(),
-        )]
+        return [
+            TestResult(
+                file=str(path),
+                name="<import>",
+                passed=False,
+                duration_ms=0.0,
+                error_message=str(e),
+                error_trace=traceback.format_exc(),
+            )
+        ]
 
     return [_run_single_test(compiled, name) for name in compiled.test_names]
 
 
-def run(paths: list[str], *, verbose: bool = False, junit_xml: Optional[str] = None) -> TestRunSummary:
+def run(
+    paths: list[str], *, verbose: bool = False, junit_xml: Optional[str] = None
+) -> TestRunSummary:
     """Run all tests under ``paths``. Print results, optionally write JUnit XML."""
     files = discover(paths or ["tests", "test"])
     if not files:
@@ -284,7 +310,9 @@ def run(paths: list[str], *, verbose: bool = False, junit_xml: Optional[str] = N
         if verbose:
             for r in results:
                 marker = "PASS" if r.passed else "FAIL"
-                sys.stdout.write(f"  [{marker}] {rel}::{r.name} ({r.duration_ms:.1f}ms)\n")
+                sys.stdout.write(
+                    f"  [{marker}] {rel}::{r.name} ({r.duration_ms:.1f}ms)\n"
+                )
                 if not r.passed and r.error_message:
                     sys.stdout.write(f"      {r.error_message}\n")
         else:
@@ -319,18 +347,27 @@ def run(paths: list[str], *, verbose: bool = False, junit_xml: Optional[str] = N
 def _write_junit_xml(summary: TestRunSummary, path: str) -> None:
     import xml.etree.ElementTree as ET
 
-    ts = ET.Element("testsuite", attrib={
-        "name": "cobra4",
-        "tests": str(summary.total),
-        "failures": str(summary.failed),
-    })
+    ts = ET.Element(
+        "testsuite",
+        attrib={
+            "name": "cobra4",
+            "tests": str(summary.total),
+            "failures": str(summary.failed),
+        },
+    )
     for r in summary.results:
-        case = ET.SubElement(ts, "testcase", attrib={
-            "classname": r.file,
-            "name": r.name,
-            "time": f"{r.duration_ms / 1000:.3f}",
-        })
+        case = ET.SubElement(
+            ts,
+            "testcase",
+            attrib={
+                "classname": r.file,
+                "name": r.name,
+                "time": f"{r.duration_ms / 1000:.3f}",
+            },
+        )
         if not r.passed:
-            f = ET.SubElement(case, "failure", attrib={"message": r.error_message or ""})
+            f = ET.SubElement(
+                case, "failure", attrib={"message": r.error_message or ""}
+            )
             f.text = r.error_trace or ""
     ET.ElementTree(ts).write(path, encoding="utf-8", xml_declaration=True)

@@ -14,7 +14,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-
 # ---------- ?. and ?? helpers ----------
 
 
@@ -35,6 +34,7 @@ def safe_attr(target: Any, name: str) -> Any:
         return None
     # Mapping path: handles dict, OrderedDict, defaultdict, ImmutableDict, etc.
     from collections.abc import Mapping
+
     if isinstance(target, Mapping):
         return target.get(name)
     return getattr(target, name, None)
@@ -100,7 +100,9 @@ def run_scheduled_for(duration: float, *, sleep_resolution: float = 0.05) -> Non
 
     Each entry tracks its own next-fire timestamp.
     """
-    deadlines: dict[int, float] = {i: time.monotonic() for i in range(len(_schedule_registry))}
+    deadlines: dict[int, float] = {
+        i: time.monotonic() for i in range(len(_schedule_registry))
+    }
     end = time.monotonic() + duration
     while time.monotonic() < end:
         now = time.monotonic()
@@ -138,7 +140,9 @@ def serve_handler(handler: Callable[..., Any], port: int) -> _ServeEntry:
     return entry
 
 
-def deploy_handler(handler: Callable[..., Any], target: Any, body: Callable[[], Any]) -> _DeployEntry:
+def deploy_handler(
+    handler: Callable[..., Any], target: Any, body: Callable[[], Any]
+) -> _DeployEntry:
     """Stub: record a deployment intent. Real adapters in M3."""
     entry = _DeployEntry(handler=handler, target=target, body=body)
     _deploy_registry.append(entry)

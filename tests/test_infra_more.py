@@ -11,15 +11,21 @@ import pytest
 
 from cobra4.runtime import infra as infra_mod
 from cobra4.runtime.infra_aws import (
-    RDSAdapter, IAMRoleAdapter,
-    _MockRDS, _MockIAM, _MockS3, _MockLambda,
-    set_test_clients, reset_test_clients,
+    RDSAdapter,
+    IAMRoleAdapter,
+    _MockRDS,
+    _MockIAM,
+    _MockS3,
+    _MockLambda,
+    set_test_clients,
+    reset_test_clients,
 )
 from cobra4.runtime.infra_k8s import (
-    K8sDeploymentAdapter, _build_manifest,
-    set_test_runner, reset_test_runner,
+    K8sDeploymentAdapter,
+    _build_manifest,
+    set_test_runner,
+    reset_test_runner,
 )
-
 
 # ---------- shared fixtures ----------
 
@@ -39,10 +45,17 @@ def _isolation():
 
 def test_rds_plan_create_for_new_instance() -> None:
     a = RDSAdapter()
-    plan = a.plan({}, {
-        "name": "db1", "engine": "postgres", "instance_class": "db.t3.medium",
-        "allocated_storage": 10, "master_username": "u", "master_password": "p",
-    })
+    plan = a.plan(
+        {},
+        {
+            "name": "db1",
+            "engine": "postgres",
+            "instance_class": "db.t3.medium",
+            "allocated_storage": 10,
+            "master_username": "u",
+            "master_password": "p",
+        },
+    )
     assert plan.kind == "create"
 
 
@@ -56,12 +69,17 @@ def test_rds_apply_then_noop() -> None:
     rds = _MockRDS()
     iam = _MockIAM()
     from cobra4.runtime import infra_aws
+
     infra_aws._TEST_CLIENTS = (_MockS3(), _MockLambda(), rds, iam)
 
     a = RDSAdapter()
     desired = {
-        "name": "db1", "engine": "postgres", "instance_class": "db.t3.medium",
-        "allocated_storage": 10, "master_username": "u", "master_password": "p",
+        "name": "db1",
+        "engine": "postgres",
+        "instance_class": "db.t3.medium",
+        "allocated_storage": 10,
+        "master_username": "u",
+        "master_password": "p",
         "publicly_accessible": False,
     }
     result = a.apply({}, desired)
@@ -76,6 +94,7 @@ def test_rds_destroy_calls_skip_final_snapshot() -> None:
     rds = _MockRDS()
     iam = _MockIAM()
     from cobra4.runtime import infra_aws
+
     infra_aws._TEST_CLIENTS = (_MockS3(), _MockLambda(), rds, iam)
 
     rds.instances["db1"] = {"DBInstanceIdentifier": "db1"}
@@ -89,10 +108,13 @@ def test_rds_destroy_calls_skip_final_snapshot() -> None:
 
 def test_iam_plan_create_for_new_role() -> None:
     a = IAMRoleAdapter()
-    plan = a.plan({}, {
-        "name": "role-x",
-        "assume_role_policy": {"Version": "2012-10-17", "Statement": []},
-    })
+    plan = a.plan(
+        {},
+        {
+            "name": "role-x",
+            "assume_role_policy": {"Version": "2012-10-17", "Statement": []},
+        },
+    )
     assert plan.kind == "create"
 
 
@@ -100,17 +122,21 @@ def test_iam_apply_attaches_policies() -> None:
     rds = _MockRDS()
     iam = _MockIAM()
     from cobra4.runtime import infra_aws
+
     infra_aws._TEST_CLIENTS = (_MockS3(), _MockLambda(), rds, iam)
 
     a = IAMRoleAdapter()
-    a.apply({}, {
-        "name": "role-y",
-        "assume_role_policy": {"Version": "2012-10-17"},
-        "policies": [
-            "arn:aws:iam::aws:policy/ReadOnlyAccess",
-            "arn:aws:iam::aws:policy/AWSLambda_FullAccess",
-        ],
-    })
+    a.apply(
+        {},
+        {
+            "name": "role-y",
+            "assume_role_policy": {"Version": "2012-10-17"},
+            "policies": [
+                "arn:aws:iam::aws:policy/ReadOnlyAccess",
+                "arn:aws:iam::aws:policy/AWSLambda_FullAccess",
+            ],
+        },
+    )
     assert "role-y" in iam.roles
     assert iam.attached["role-y"] == {
         "arn:aws:iam::aws:policy/ReadOnlyAccess",
@@ -122,6 +148,7 @@ def test_iam_apply_detaches_removed_policies() -> None:
     rds = _MockRDS()
     iam = _MockIAM()
     from cobra4.runtime import infra_aws
+
     infra_aws._TEST_CLIENTS = (_MockS3(), _MockLambda(), rds, iam)
 
     a = IAMRoleAdapter()
@@ -135,6 +162,7 @@ def test_iam_destroy_detaches_before_delete() -> None:
     rds = _MockRDS()
     iam = _MockIAM()
     from cobra4.runtime import infra_aws
+
     infra_aws._TEST_CLIENTS = (_MockS3(), _MockLambda(), rds, iam)
 
     iam.roles["r"] = {"RoleName": "r"}
@@ -158,10 +186,14 @@ def test_k8s_build_manifest_includes_replicas_and_image() -> None:
 
 
 def test_k8s_build_manifest_includes_ports_and_env() -> None:
-    src = _build_manifest({
-        "name": "x", "image": "i", "ports": [8080, 9090],
-        "env": {"K": "V", "K2": "V2"},
-    })
+    src = _build_manifest(
+        {
+            "name": "x",
+            "image": "i",
+            "ports": [8080, 9090],
+            "env": {"K": "V", "K2": "V2"},
+        }
+    )
     m = json.loads(src)
     container = m["spec"]["template"]["spec"]["containers"][0]
     assert [p["containerPort"] for p in container["ports"]] == [8080, 9090]
@@ -181,6 +213,7 @@ def test_k8s_plan_noop_when_manifest_unchanged() -> None:
     desired = {"name": "x", "image": "i", "replicas": 1}
     manifest = _build_manifest(desired)
     import hashlib
+
     h = hashlib.sha256(manifest.encode()).hexdigest()
     current = {"name": "x", "manifest_hash": h}
     a = K8sDeploymentAdapter()
@@ -222,14 +255,20 @@ def test_k8s_destroy_calls_delete() -> None:
 # ---------- end-to-end via cobra4 source ----------
 
 
-def _run_c4(args: list[str], cwd: Path, env_extra: dict | None = None) -> tuple[int, str]:
+def _run_c4(
+    args: list[str], cwd: Path, env_extra: dict | None = None
+) -> tuple[int, str]:
     import os
+
     env = dict(os.environ)
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", *args],
-        capture_output=True, text=True, cwd=cwd, env=env,
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env=env,
     )
     return proc.returncode, proc.stdout + "\n" + proc.stderr
 
@@ -238,14 +277,14 @@ def test_e2e_rds_plan(tmp_path: Path) -> None:
     """End-to-end plan for an RDS resource through `c4 infra plan`."""
     src = tmp_path / "infra.c4"
     src.write_text(
-        'resource db = aws.rds {\n'
+        "resource db = aws.rds {\n"
         '    name: "test-pg"\n'
         '    engine: "postgres"\n'
         '    instance_class: "db.t3.micro"\n'
-        '    allocated_storage: 20\n'
+        "    allocated_storage: 20\n"
         '    master_username: "u"\n'
         '    master_password: "p"\n'
-        '}\n'
+        "}\n"
     )
     code, out = _run_c4(["infra", "plan", str(src)], tmp_path)
     assert code == 0, out
@@ -256,11 +295,11 @@ def test_e2e_rds_plan(tmp_path: Path) -> None:
 def test_e2e_iam_plan(tmp_path: Path) -> None:
     src = tmp_path / "infra.c4"
     src.write_text(
-        'resource role = aws.iam {\n'
+        "resource role = aws.iam {\n"
         '    name: "test-role"\n'
         '    assume_role_policy: {"Version": "2012-10-17"}\n'
         '    policies: ["arn:aws:iam::aws:policy/ReadOnlyAccess"]\n'
-        '}\n'
+        "}\n"
     )
     code, out = _run_c4(["infra", "plan", str(src)], tmp_path)
     assert code == 0, out

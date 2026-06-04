@@ -33,9 +33,12 @@ import re
 
 from cobra4.plugins.api import LanguagePlugin, register_plugin
 from cobra4.runtime.prom import (
-    make_counter, make_histogram, make_gauge, metrics_text, reset_registry,
+    make_counter,
+    make_histogram,
+    make_gauge,
+    metrics_text,
+    reset_registry,
 )
-
 
 # Per metric kind we capture: name, optional labels=[...], optional
 # buckets=[...] (histogram only), optional doc="...".
@@ -133,6 +136,7 @@ def _transform(source: str) -> str:
 # A namespace object so users can do `prom.metrics_text()` from cobra4.
 class _Prom:
     """Convenience surface for cobra4 modules: ``prom.metrics_text()``."""
+
     metrics_text = staticmethod(metrics_text)
     reset_registry = staticmethod(reset_registry)
 

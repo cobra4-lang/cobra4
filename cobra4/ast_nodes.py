@@ -13,7 +13,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-
 # ---------- Position ----------
 
 
@@ -214,7 +213,7 @@ class Call(Expr):
 class Lambda(Expr):
     params: list["Param"] = field(default_factory=list)
     return_type: Optional["TypeRef"] = None
-    body: Optional[Expr] = None         # for `=` form
+    body: Optional[Expr] = None  # for `=` form
     block: Optional[list["Stmt"]] = None  # for `{ ... }` form
 
 
@@ -437,14 +436,15 @@ class Sandbox(Stmt):
     Nesting intersects masks: a child cannot allow effects the parent
     forbids.
     """
+
     effects: list[str] = field(default_factory=list)
     body: list[Stmt] = field(default_factory=list)
 
 
 @dataclass
 class Use(Stmt):
-    target: str = ""             # dotted name or string path
-    is_string: bool = False      # True if `use "path"`
+    target: str = ""  # dotted name or string path
+    is_string: bool = False  # True if `use "path"`
     alias: Optional[str] = None
 
 
@@ -453,10 +453,10 @@ class FnDecl(Stmt):
     name: str = ""
     params: list["Param"] = field(default_factory=list)
     return_type: Optional["TypeRef"] = None
-    body: Optional[Expr] = None         # `=` form
+    body: Optional[Expr] = None  # `=` form
     block: Optional[list[Stmt]] = None  # `{ ... }` form
     decorators: list["Decorator"] = field(default_factory=list)
-    is_async: bool = False              # `async fn name() { ... }`
+    is_async: bool = False  # `async fn name() { ... }`
     # Declared effect set (`with [http, db]`). ``None`` = unannotated
     # (any effect allowed). ``[]`` = explicitly pure.
     effects: Optional[list[str]] = None
@@ -464,7 +464,7 @@ class FnDecl(Stmt):
 
 @dataclass
 class Decorator(Node):
-    name: str = ""           # dotted, e.g. "smart" or "obs.trace"
+    name: str = ""  # dotted, e.g. "smart" or "obs.trace"
     args: list[Arg] = field(default_factory=list)
     has_call: bool = False
 
@@ -474,8 +474,8 @@ class Param(Node):
     name: str = ""
     type_ref: Optional["TypeRef"] = None
     default: Optional[Expr] = None
-    star: bool = False    # *args
-    dstar: bool = False   # **kwargs
+    star: bool = False  # *args
+    dstar: bool = False  # **kwargs
 
 
 @dataclass
@@ -508,6 +508,7 @@ class DataClassDecl(Stmt):
 
     Codegen produces a stdlib ``@dataclass`` with the listed fields.
     """
+
     name: str = ""
     fields: list[DataField] = field(default_factory=list)
 
@@ -536,6 +537,7 @@ class WorkflowDecl(Stmt):
     time and passed to the runtime ``Workflow.add(...)`` rather than to
     the underlying user function.
     """
+
     name: str = ""
     tasks: list[TaskAssign] = field(default_factory=list)
 
@@ -548,8 +550,9 @@ class ResourceDecl(Stmt):
     just registers with the infra registry). Run with ``c4 infra
     plan|apply|destroy``.
     """
+
     name: str = ""
-    adapter_path: str = ""        # dotted, e.g. "aws.s3" or "local.file"
+    adapter_path: str = ""  # dotted, e.g. "aws.s3" or "local.file"
     fields: list[tuple[str, Expr]] = field(default_factory=list)
 
 
@@ -561,5 +564,6 @@ class DataSumDecl(Stmt):
     subclass. Pattern matching (``match e { case OrderPlaced(id) ... }``)
     binds positional fields by declaration order.
     """
+
     name: str = ""
     variants: list[DataVariant] = field(default_factory=list)

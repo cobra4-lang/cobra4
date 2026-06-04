@@ -15,10 +15,12 @@ from pathlib import Path
 import pytest
 
 from cobra4.runtime.effects import (
-    EffectViolation, current_allowed, check, with_effects,
+    EffectViolation,
+    current_allowed,
+    check,
+    with_effects,
 )
 from cobra4.runtime import log, save, secret, queue
-
 
 # ---------- runtime API ----------
 
@@ -46,7 +48,7 @@ def test_sandbox_intersects_when_nested() -> None:
             with pytest.raises(EffectViolation):
                 check("http")  # outer didn't allow http
             with pytest.raises(EffectViolation):
-                check("fs")    # inner didn't list fs
+                check("fs")  # inner didn't list fs
 
 
 def test_sandbox_pops_on_exit() -> None:
@@ -78,8 +80,10 @@ def test_sandbox_is_thread_local() -> None:
 
     t1 = threading.Thread(target=worker, args=("a", "log"))
     t2 = threading.Thread(target=worker, args=("b", "fs"))
-    t1.start(); t2.start()
-    t1.join(); t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
     assert seen["a"] == frozenset({"log"})
     assert seen["b"] == frozenset({"fs"})
 
@@ -126,17 +130,15 @@ def _run_c4(tmp_path: Path, src: str) -> tuple[int, str, str]:
     f.write_text(src)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(f)],
-        capture_output=True, text=True, cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
 
 def test_e2e_sandbox_block_compiles_and_runs(tmp_path: Path) -> None:
-    src = (
-        'sandbox [log] {\n'
-        '    log("inside")\n'
-        '}\n'
-    )
+    src = "sandbox [log] {\n" '    log("inside")\n' "}\n"
     code, _, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr
     assert "inside" in stderr
@@ -144,13 +146,13 @@ def test_e2e_sandbox_block_compiles_and_runs(tmp_path: Path) -> None:
 
 def test_e2e_sandbox_violation_can_be_caught(tmp_path: Path) -> None:
     src = (
-        'sandbox [log] {\n'
-        '    try {\n'
+        "sandbox [log] {\n"
+        "    try {\n"
         '        save({"k": 1}, "./x.json")\n'
-        '    } catch EffectViolation as e {\n'
+        "    } catch EffectViolation as e {\n"
         '        log("blocked", err=str(e))\n'
-        '    }\n'
-        '}\n'
+        "    }\n"
+        "}\n"
     )
     code, _, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr

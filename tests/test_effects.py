@@ -60,22 +60,13 @@ def test_effect_clause_combined_with_async() -> None:
 
 def test_unannotated_fn_skips_effect_check() -> None:
     """No `with` → no constraint, even if body calls effectful builtins."""
-    src = (
-        "fn f(x) {\n"
-        "    log(\"hi\")\n"
-        "    fetch(\"http://x\")\n"
-        "}\n"
-    )
+    src = "fn f(x) {\n" '    log("hi")\n' '    fetch("http://x")\n' "}\n"
     _, diags = _check(src)
     assert not any(d.code == "E001" for d in diags)
 
 
 def test_pure_fn_calling_log_warns() -> None:
-    src = (
-        "fn f(x) with [] {\n"
-        "    log(\"this should be flagged\")\n"
-        "}\n"
-    )
+    src = "fn f(x) with [] {\n" '    log("this should be flagged")\n' "}\n"
     _, diags = _check(src)
     e001 = [d for d in diags if d.code == "E001"]
     assert len(e001) == 1
@@ -101,7 +92,7 @@ def test_caller_with_superset_effects_silent() -> None:
         "fn fetch_user(id) with [http] = id\n"
         "fn caller(id) with [http, log] {\n"
         "    fetch_user(id)\n"
-        "    log(\"got it\")\n"
+        '    log("got it")\n'
         "}\n"
     )
     _, diags = _check(src)
@@ -110,8 +101,7 @@ def test_caller_with_superset_effects_silent() -> None:
 
 def test_pure_fn_calling_pure_fn_silent() -> None:
     src = (
-        "fn double(x) with [] = x * 2\n"
-        "fn quadruple(x) with [] = double(double(x))\n"
+        "fn double(x) with [] = x * 2\n" "fn quadruple(x) with [] = double(double(x))\n"
     )
     _, diags = _check(src)
     assert not any(d.code == "E001" for d in diags), diags
@@ -123,7 +113,7 @@ def test_unannotated_callee_does_not_propagate_effects() -> None:
     the user opts in to checking by adding `with [...]` to helper."""
     src = (
         "fn helper(x) {\n"
-        "    log(\"side effect\")\n"
+        '    log("side effect")\n'
         "    return x\n"
         "}\n"
         "fn pure_caller(x) with [] = helper(x)\n"
@@ -142,10 +132,10 @@ def test_typechecker_records_declared_effects_on_signature() -> None:
 def test_builtin_effects_recognized_for_log_fetch_secret_run() -> None:
     src = (
         "fn must_be_pure(x) with [] {\n"
-        "    log(\"x\")\n"
-        "    fetch(\"http://x\")\n"
-        "    secret(\"k\")\n"
-        "    run(\"ls\")\n"
+        '    log("x")\n'
+        '    fetch("http://x")\n'
+        '    secret("k")\n'
+        '    run("ls")\n'
         "}\n"
     )
     _, diags = _check(src)
@@ -159,7 +149,7 @@ def test_builtin_effects_recognized_for_log_fetch_secret_run() -> None:
 def test_effect_check_is_warning_not_error() -> None:
     """E001 is advisory like the rest of the type checker — we don't
     block compilation. Confirm severity."""
-    src = "fn f() with [] { log(\"x\") }\n"
+    src = 'fn f() with [] { log("x") }\n'
     _, diags = _check(src)
     e001 = [d for d in diags if d.code == "E001"]
     assert e001

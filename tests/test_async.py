@@ -13,7 +13,6 @@ from cobra4 import ast_nodes as N
 from cobra4.codegen import generate
 from cobra4.runtime.concurrency import async_parallel_for
 
-
 # ---------- parsing ----------
 
 
@@ -122,8 +121,10 @@ def test_async_parallel_for_workers_caps_concurrency() -> None:
 def test_async_parallel_for_handles_sync_callable() -> None:
     """If `fn` is sync (not a coroutine), `async_parallel_for` should
     still work — useful when mixing sync and async helpers."""
+
     def squared(x):
         return x * x
+
     out = asyncio.run(async_parallel_for([1, 2, 3], squared, workers=2))
     assert out == [1, 4, 9]
 
@@ -136,7 +137,8 @@ def _run_c4(tmp_path: Path, src: str) -> tuple[int, str, str]:
     f.write_text(src)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(f)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -146,11 +148,11 @@ def test_e2e_async_main(tmp_path: Path) -> None:
         "use asyncio\n"
         "async fn fetch_one(url) {\n"
         "    await asyncio.sleep(0.001)\n"
-        "    return \"ok-{url}\"\n"
+        '    return "ok-{url}"\n'
         "}\n"
         "async fn main() {\n"
-        "    r = await fetch_one(\"a\")\n"
-        "    log(\"got\", r=r)\n"
+        '    r = await fetch_one("a")\n'
+        '    log("got", r=r)\n'
         "}\n"
         "asyncio.run(main())\n"
     )
@@ -168,7 +170,7 @@ def test_e2e_async_each_in_parallel(tmp_path: Path) -> None:
         "}\n"
         "async fn main() {\n"
         "    rs = each x in [1, 2, 3, 4, 5] in parallel(workers=3) { await fetch(x) }\n"
-        "    log(\"all\", n=len(rs), sum=sum(rs))\n"
+        '    log("all", n=len(rs), sum=sum(rs))\n'
         "}\n"
         "asyncio.run(main())\n"
     )

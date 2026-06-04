@@ -20,8 +20,11 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from cobra4.runtime import observe
-from cobra4.runtime.core import _DeployEntry, _deploy_registry, deploy_handler as _record
-
+from cobra4.runtime.core import (
+    _DeployEntry,
+    _deploy_registry,
+    deploy_handler as _record,
+)
 
 _Adapter = Callable[[Callable[..., Any], "DeployTarget", dict], Any]
 _adapters: dict[str, _Adapter] = {}
@@ -119,7 +122,9 @@ class _AdapterBuilder:
     def __getattr__(self, attr: str) -> "_AdapterBuilder":
         if attr.startswith("_"):
             raise AttributeError(attr)
-        return _AdapterBuilder(prefix=f"{self._prefix}.{attr}" if self._prefix else attr)
+        return _AdapterBuilder(
+            prefix=f"{self._prefix}.{attr}" if self._prefix else attr
+        )
 
     def __call__(self, **kwargs: Any) -> DeployTarget:
         return DeployTarget(name=self._prefix, args=kwargs)
@@ -188,10 +193,20 @@ def _aws_lambda_adapter(handler, target: DeployTarget, args: dict) -> Any:
     client = boto3.client("lambda", region_name=region)
     try:
         client.get_function(FunctionName=fn_name)
-        observe.log("deploy.aws-lambda.update", name=fn_name, region=region, size=len(code_bytes))
+        observe.log(
+            "deploy.aws-lambda.update",
+            name=fn_name,
+            region=region,
+            size=len(code_bytes),
+        )
         client.update_function_code(FunctionName=fn_name, ZipFile=code_bytes)
     except client.exceptions.ResourceNotFoundException:
-        observe.log("deploy.aws-lambda.create", name=fn_name, region=region, size=len(code_bytes))
+        observe.log(
+            "deploy.aws-lambda.create",
+            name=fn_name,
+            region=region,
+            size=len(code_bytes),
+        )
         client.create_function(
             FunctionName=fn_name,
             Runtime=args.get("runtime", "python3.12"),
@@ -230,6 +245,7 @@ def build_lambda_package(handler: Any, fn_name: str, memory: int) -> str:
 
     # Vendored runtime (just the directory tree)
     import cobra4 as _c4
+
     runtime_root = _os.path.dirname(_os.path.abspath(_c4.__file__))
 
     entry = (
@@ -281,7 +297,9 @@ def _gcp_run_adapter(handler, target: DeployTarget, args: dict) -> Any:
 
     project = args.get("project") or os.environ.get("GOOGLE_CLOUD_PROJECT")
     if not project:
-        raise RuntimeError("gcp.run requires `project=...` or GOOGLE_CLOUD_PROJECT env var")
+        raise RuntimeError(
+            "gcp.run requires `project=...` or GOOGLE_CLOUD_PROJECT env var"
+        )
     region = args.get("region", "us-central1")
     service = args.get("name") or getattr(handler, "__name__", "cobra4-svc")
     image = args.get("image")
@@ -290,21 +308,34 @@ def _gcp_run_adapter(handler, target: DeployTarget, args: dict) -> Any:
         image = f"{region}-docker.pkg.dev/{project}/cobra4/{service}:latest"
         build_dir = build_cloud_run_image(handler, service)
         if shutil.which("docker") is None:
-            raise RuntimeError("gcp.run image build requires `docker` on PATH (or pass image=...)")
+            raise RuntimeError(
+                "gcp.run image build requires `docker` on PATH (or pass image=...)"
+            )
         observe.log("deploy.gcp-run.build", image=image, dir=build_dir)
         _sp.run(["docker", "build", "-t", image, build_dir], check=True)
         _sp.run(["docker", "push", image], check=True)
 
     cmd = [
-        "gcloud", "run", "deploy", service,
-        "--image", image,
-        "--region", region,
-        "--project", project,
-        "--platform", "managed",
-        "--memory", args.get("memory", "512Mi"),
-        "--cpu", str(args.get("cpu", 1)),
-        "--concurrency", str(args.get("concurrency", 80)),
-        "--port", str(args.get("port", 8080)),
+        "gcloud",
+        "run",
+        "deploy",
+        service,
+        "--image",
+        image,
+        "--region",
+        region,
+        "--project",
+        project,
+        "--platform",
+        "managed",
+        "--memory",
+        args.get("memory", "512Mi"),
+        "--cpu",
+        str(args.get("cpu", 1)),
+        "--concurrency",
+        str(args.get("concurrency", 80)),
+        "--port",
+        str(args.get("port", 8080)),
     ]
     if args.get("allow_unauthenticated"):
         cmd.append("--allow-unauthenticated")
@@ -329,6 +360,7 @@ def build_cloud_run_image(handler: Any, service: str) -> str:
 
     # Vendor the cobra4 runtime tree.
     import cobra4 as _c4
+
     runtime_root = os.path.dirname(os.path.abspath(_c4.__file__))
     shutil.copytree(runtime_root, os.path.join(out_dir, "cobra4"), dirs_exist_ok=True)
 
@@ -406,7 +438,9 @@ def _k8s_adapter(handler, target: DeployTarget, args: dict) -> Any:
 
     name = args.get("name") or getattr(handler, "__name__", "cobra4-app")
     manifest = build_k8s_manifest(name=name, **args)
-    observe.log("deploy.k8s.apply", name=name, namespace=args.get("namespace", "default"))
+    observe.log(
+        "deploy.k8s.apply", name=name, namespace=args.get("namespace", "default")
+    )
     proc = _sp.run(
         ["kubectl", "apply", "-f", "-"],
         input=manifest,
@@ -415,7 +449,11 @@ def _k8s_adapter(handler, target: DeployTarget, args: dict) -> Any:
     )
     if proc.returncode != 0:
         raise RuntimeError(f"kubectl apply failed: {proc.stderr}")
-    return {"name": name, "namespace": args.get("namespace", "default"), "stdout": proc.stdout}
+    return {
+        "name": name,
+        "namespace": args.get("namespace", "default"),
+        "stdout": proc.stdout,
+    }
 
 
 def build_k8s_manifest(
@@ -495,7 +533,13 @@ def _fly_adapter(handler, target: DeployTarget, args: dict) -> Any:
         )
         with open(os.path.join(build_dir, "fly.toml"), "w", encoding="utf-8") as f:
             f.write(fly_toml)
-        cmd = [flyctl, "deploy", "--remote-only", "-c", os.path.join(build_dir, "fly.toml")]
+        cmd = [
+            flyctl,
+            "deploy",
+            "--remote-only",
+            "-c",
+            os.path.join(build_dir, "fly.toml"),
+        ]
     observe.log("deploy.fly.deploy", app=args["app"])
     _sp.run(cmd, check=True)
     return {"app": args["app"]}

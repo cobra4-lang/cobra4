@@ -15,7 +15,6 @@ import pytest
 
 from cobra4 import templates as _templates
 
-
 # ---------- Python-side template structure ----------
 
 
@@ -42,10 +41,14 @@ def test_template_main_is_non_empty() -> None:
 # ---------- CLI-driven init tests ----------
 
 
-def _c4_init(tmp_path: Path, template: str, name: str = "myproj") -> tuple[int, str, str]:
+def _c4_init(
+    tmp_path: Path, template: str, name: str = "myproj"
+) -> tuple[int, str, str]:
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "init", name, "-t", template],
-        capture_output=True, text=True, cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -53,7 +56,9 @@ def _c4_init(tmp_path: Path, template: str, name: str = "myproj") -> tuple[int, 
 def _c4_check(file: Path) -> tuple[int, str, str]:
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "check", str(file)],
-        capture_output=True, text=True, cwd=file.parent,
+        capture_output=True,
+        text=True,
+        cwd=file.parent,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -61,12 +66,17 @@ def _c4_check(file: Path) -> tuple[int, str, str]:
 def _c4_run(file: Path) -> tuple[int, str, str]:
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(file)],
-        capture_output=True, text=True, cwd=file.parent.parent, timeout=10,
+        capture_output=True,
+        text=True,
+        cwd=file.parent.parent,
+        timeout=10,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
 
-@pytest.mark.parametrize("template", ["http-service", "etl-pipeline", "agent", "daemon"])
+@pytest.mark.parametrize(
+    "template", ["http-service", "etl-pipeline", "agent", "daemon"]
+)
 def test_init_creates_files(tmp_path: Path, template: str) -> None:
     code, _, stderr = _c4_init(tmp_path, template)
     assert code == 0, stderr
@@ -74,7 +84,9 @@ def test_init_creates_files(tmp_path: Path, template: str) -> None:
     assert (tmp_path / "myproj" / "cobra4.toml").exists()
 
 
-@pytest.mark.parametrize("template", ["http-service", "etl-pipeline", "agent", "daemon"])
+@pytest.mark.parametrize(
+    "template", ["http-service", "etl-pipeline", "agent", "daemon"]
+)
 def test_init_main_passes_check(tmp_path: Path, template: str) -> None:
     """Every template's main.c4 must be valid cobra4 — `c4 check` exits 0."""
     _c4_init(tmp_path, template)
@@ -111,9 +123,19 @@ def test_init_refuses_existing_dir_without_force(tmp_path: Path) -> None:
 def test_init_force_allows_existing_dir(tmp_path: Path) -> None:
     (tmp_path / "myproj").mkdir()
     proc = subprocess.run(
-        [sys.executable, "-m", "cobra4.cli", "init", "myproj",
-         "-t", "http-service", "--force"],
-        capture_output=True, text=True, cwd=tmp_path,
+        [
+            sys.executable,
+            "-m",
+            "cobra4.cli",
+            "init",
+            "myproj",
+            "-t",
+            "http-service",
+            "--force",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
     )
     assert proc.returncode == 0, proc.stderr
     assert (tmp_path / "myproj" / "src" / "main.c4").exists()
@@ -122,7 +144,8 @@ def test_init_force_allows_existing_dir(tmp_path: Path) -> None:
 def test_init_list_prints_templates() -> None:
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "init", "--list"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert proc.returncode == 0
     out = proc.stdout
@@ -145,7 +168,9 @@ def test_each_as_statement_runs_body_assignments(tmp_path: Path) -> None:
     )
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(f)],
-        capture_output=True, text=True, cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
     )
     assert proc.returncode == 0, proc.stderr
     # Each row got its 'b' key set

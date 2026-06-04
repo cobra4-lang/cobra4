@@ -25,7 +25,6 @@ import re
 
 from cobra4.plugins.api import LanguagePlugin, register_plugin
 
-
 # Triple-quoted block first (preferred for multi-line YAML).
 _YAML_TRIPLE = re.compile(r'yaml"""(?P<body>.*?)"""', re.DOTALL)
 # Single-quoted single-line YAML.
@@ -35,7 +34,9 @@ _YAML_SINGLE = re.compile(r'yaml"((?:[^"\\]|\\.)*)"')
 def _transform(source: str) -> str:
     def _triple(m: re.Match) -> str:
         body = m.group("body")
-        body_escaped = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        body_escaped = (
+            body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        )
         return f'yaml_load("{body_escaped}")'
 
     out = _YAML_TRIPLE.sub(_triple, source)
@@ -53,9 +54,7 @@ def yaml_load(text: str):
     try:
         import yaml  # type: ignore
     except ImportError as e:  # pragma: no cover
-        raise RuntimeError(
-            "yaml plugin runtime requires `pip install pyyaml`."
-        ) from e
+        raise RuntimeError("yaml plugin runtime requires `pip install pyyaml`.") from e
     return yaml.safe_load(text)
 
 

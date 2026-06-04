@@ -11,9 +11,9 @@ import pytest
 import importlib
 
 from cobra4.runtime import fleet, secrets
+
 deploy = importlib.import_module("cobra4.runtime.deploy")  # the module
 from cobra4.runtime.deploy import DeployTarget, aws, gcp
-
 
 # ---------- Fleet ----------
 
@@ -109,7 +109,11 @@ def test_deploy_dry_run_default():
     """Default mode logs the plan and does not call the adapter."""
     os.environ.pop("COBRA4_DEPLOY_DRY_RUN", None)
     handler = lambda req: {"ok": True}
-    target = aws.lambda_(region="us-east-1") if hasattr(aws, "lambda_") else aws.__getattr__("lambda")(region="us-east-1")
+    target = (
+        aws.lambda_(region="us-east-1")
+        if hasattr(aws, "lambda_")
+        else aws.__getattr__("lambda")(region="us-east-1")
+    )
     entry = deploy.deploy(handler, target)
     assert entry is not None
 

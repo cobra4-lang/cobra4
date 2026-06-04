@@ -22,7 +22,6 @@ from dataclasses import dataclass
 
 from cobra4.plugins.api import LanguagePlugin, get_plugin
 
-
 _LANG_USE_RE = re.compile(r"^\s*lang\s+use\s+([A-Za-z_][A-Za-z0-9_]*)\s*$")
 
 

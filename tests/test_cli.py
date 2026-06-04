@@ -100,8 +100,8 @@ def test_cli_run_resets_and_forwards_argv():
         src = Path(d) / "x.c4"
         src.write_text(
             "use sys\n"
-            "print(sys.argv[0].endswith(\"x.c4\"))\n"
-            "print(\"|\".join(sys.argv[1:]))\n",
+            'print(sys.argv[0].endswith("x.c4"))\n'
+            'print("|".join(sys.argv[1:]))\n',
             encoding="utf-8",
         )
         p = _run_cli("run", str(src), "--", "--name", "ada", "pos", cwd=d)

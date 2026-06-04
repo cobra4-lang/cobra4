@@ -135,12 +135,17 @@ def _read_s3(target: str, **kwargs: Any) -> Any:
     if ext == "csv":
         return list(csv.DictReader(io.StringIO(body.decode("utf-8"))))
     if ext == "jsonl":
-        return [json.loads(line) for line in body.decode("utf-8").splitlines() if line.strip()]
+        return [
+            json.loads(line)
+            for line in body.decode("utf-8").splitlines()
+            if line.strip()
+        ]
     if ext == "json":
         return json.loads(body.decode("utf-8"))
     if ext == "parquet":
         try:
             import pyarrow.parquet as pq  # type: ignore
+
             return pq.read_table(io.BytesIO(body)).to_pylist()
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("parquet support requires `cobra4[data]`") from e
@@ -148,7 +153,7 @@ def _read_s3(target: str, **kwargs: Any) -> Any:
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
-    rest = uri[len("s3://"):]
+    rest = uri[len("s3://") :]
     bucket, _, key = rest.partition("/")
     return bucket, key
 
@@ -245,13 +250,19 @@ def _encode_for_ext(value: Any, ext: str) -> tuple[bytes, str]:
     if ext == "json":
         return json.dumps(value, indent=2).encode("utf-8"), "application/json"
     if ext == "jsonl":
-        return "\n".join(json.dumps(x) for x in value).encode("utf-8"), "application/x-ndjson"
+        return (
+            "\n".join(json.dumps(x) for x in value).encode("utf-8"),
+            "application/x-ndjson",
+        )
     if ext in ("yaml", "yml"):
         try:
             import yaml  # type: ignore
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("yaml support requires `cobra4[yaml]`") from e
-        return yaml.safe_dump(value, sort_keys=False).encode("utf-8"), "application/yaml"
+        return (
+            yaml.safe_dump(value, sort_keys=False).encode("utf-8"),
+            "application/yaml",
+        )
     return str(value).encode("utf-8"), "text/plain"
 
 
@@ -326,13 +337,29 @@ def _save_s3(value: Any, target: str, **_) -> str:
 def _register_handlers() -> None:
     # read — local
     read.register(_read_local_csv, type=str, scheme="file", ext="csv", name="local-csv")
-    read.register(_read_local_json, type=str, scheme="file", ext="json", name="local-json")
-    read.register(_read_local_yaml, type=str, scheme="file", ext="yaml", name="local-yaml")
-    read.register(_read_local_yaml, type=str, scheme="file", ext="yml", name="local-yml")
-    read.register(_read_local_jsonl, type=str, scheme="file", ext="jsonl", name="local-jsonl")
-    read.register(_read_local_text, type=str, scheme="file", ext="txt", name="local-txt")
+    read.register(
+        _read_local_json, type=str, scheme="file", ext="json", name="local-json"
+    )
+    read.register(
+        _read_local_yaml, type=str, scheme="file", ext="yaml", name="local-yaml"
+    )
+    read.register(
+        _read_local_yaml, type=str, scheme="file", ext="yml", name="local-yml"
+    )
+    read.register(
+        _read_local_jsonl, type=str, scheme="file", ext="jsonl", name="local-jsonl"
+    )
+    read.register(
+        _read_local_text, type=str, scheme="file", ext="txt", name="local-txt"
+    )
     read.register(_read_local_text, type=str, scheme="file", ext="md", name="local-md")
-    read.register(_read_local_parquet, type=str, scheme="file", ext="parquet", name="local-parquet")
+    read.register(
+        _read_local_parquet,
+        type=str,
+        scheme="file",
+        ext="parquet",
+        name="local-parquet",
+    )
     # Generic fallback for any local file: read as UTF-8 text.
     read.register(_read_local_text, type=str, scheme="file", name="local-text-fallback")
     # read — http
@@ -341,19 +368,37 @@ def _register_handlers() -> None:
     # read — s3
     read.register(_read_s3, type=str, scheme="s3", name="s3")
     # read — Path objects
-    read.register(lambda p, **kw: read(str(p), **kw), type=Path, name="path-redirect", priority=1)
+    read.register(
+        lambda p, **kw: read(str(p), **kw), type=Path, name="path-redirect", priority=1
+    )
 
     # save — local (note: save's first arg is value, second is target — but
     # SmartFn dispatches on first arg. We invert: save dispatches on TARGET
     # via a custom `when` predicate that inspects args[1].)
-    save.register(_save_local_csv, when=_target_is("file", "csv"), name="local-csv-save")
-    save.register(_save_local_json, when=_target_is("file", "json"), name="local-json-save")
-    save.register(_save_local_yaml, when=_target_is("file", "yaml"), name="local-yaml-save")
-    save.register(_save_local_yaml, when=_target_is("file", "yml"), name="local-yml-save")
-    save.register(_save_local_jsonl, when=_target_is("file", "jsonl"), name="local-jsonl-save")
-    save.register(_save_local_text, when=_target_is("file", "txt"), name="local-txt-save")
+    save.register(
+        _save_local_csv, when=_target_is("file", "csv"), name="local-csv-save"
+    )
+    save.register(
+        _save_local_json, when=_target_is("file", "json"), name="local-json-save"
+    )
+    save.register(
+        _save_local_yaml, when=_target_is("file", "yaml"), name="local-yaml-save"
+    )
+    save.register(
+        _save_local_yaml, when=_target_is("file", "yml"), name="local-yml-save"
+    )
+    save.register(
+        _save_local_jsonl, when=_target_is("file", "jsonl"), name="local-jsonl-save"
+    )
+    save.register(
+        _save_local_text, when=_target_is("file", "txt"), name="local-txt-save"
+    )
     save.register(_save_local_text, when=_target_is("file", "md"), name="local-md-save")
-    save.register(_save_local_parquet, when=_target_is("file", "parquet"), name="local-parquet-save")
+    save.register(
+        _save_local_parquet,
+        when=_target_is("file", "parquet"),
+        name="local-parquet-save",
+    )
     save.register(_save_s3, when=_target_is_scheme("s3"), name="s3-save")
     save.register(_save_http, when=_target_is_scheme("http"), name="http-save")
     save.register(_save_http, when=_target_is_scheme("https"), name="https-save")
@@ -404,9 +449,12 @@ def _install_save_dispatch() -> None:
         def make_adapter(orig=original):
             def _adapter(target, value, **kw):
                 return orig(value, target, **kw)
+
             return _adapter
 
-        _save_inner.register(make_adapter(), type=str, scheme=scheme, ext=ext, name=h.name)
+        _save_inner.register(
+            make_adapter(), type=str, scheme=scheme, ext=ext, name=h.name
+        )
         moved.append(h)
     # Replace `save`'s default with our dispatcher.
     save._handlers.clear()

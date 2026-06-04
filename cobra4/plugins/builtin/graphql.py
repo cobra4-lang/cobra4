@@ -31,7 +31,6 @@ import re
 from cobra4.plugins.api import LanguagePlugin, register_plugin
 from cobra4.runtime.graphql import parse_document as _c4_graphql_parse
 
-
 # `graphql"""..."""` — non-greedy match across newlines.
 _GRAPHQL_TRIPLE = re.compile(r'graphql"""(?P<body>.*?)"""', re.DOTALL)
 
@@ -48,6 +47,7 @@ def _transform(source: str) -> str:
         body = body.replace("{", "{{").replace("}", "}}")
         body = body.replace('"""', '\\"""')
         return f'_c4_graphql_parse("""{body}""")'
+
     return _GRAPHQL_TRIPLE.sub(_repl, source)
 
 

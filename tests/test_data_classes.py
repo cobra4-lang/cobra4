@@ -83,7 +83,8 @@ def _run_c4(tmp_path: Path, src: str) -> tuple[int, str, str]:
     f.write_text(src)
     proc = subprocess.run(
         [sys.executable, "-m", "cobra4.cli", "run", str(f)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -92,7 +93,7 @@ def test_runtime_data_class_can_be_constructed_and_accessed(tmp_path: Path) -> N
     src = (
         "data class Point(x: int, y: int = 0)\n"
         "p = Point(3, 4)\n"
-        "log(\"pt\", x=p.x, y=p.y)\n"
+        'log("pt", x=p.x, y=p.y)\n'
     )
     code, _stdout, stderr = _run_c4(tmp_path, src)
     assert code == 0, stderr
@@ -105,10 +106,10 @@ def test_runtime_data_sum_pattern_match(tmp_path: Path) -> None:
         "    Placed(id: str)\n"
         "    Refunded(id: str, reason: str)\n"
         "}\n"
-        "ev = Refunded(id=\"a\", reason=\"too expensive\")\n"
+        'ev = Refunded(id="a", reason="too expensive")\n'
         "match ev {\n"
-        "    case Placed(id) { log(\"placed\", id=id) }\n"
-        "    case Refunded(id, reason) { log(\"refunded\", id=id, reason=reason) }\n"
+        '    case Placed(id) { log("placed", id=id) }\n'
+        '    case Refunded(id, reason) { log("refunded", id=id, reason=reason) }\n'
         "}\n"
     )
     code, _stdout, stderr = _run_c4(tmp_path, src)

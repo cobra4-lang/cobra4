@@ -37,7 +37,7 @@ def _common(project_name: str) -> dict[str, str]:
 # 1. http-service
 # ---------------------------------------------------------------------------
 
-_HTTP_SERVICE_MAIN = '''\
+_HTTP_SERVICE_MAIN = """\
 # {name} — HTTP service starter (cobra4)
 # Run as a daemon:  c4 serve src/main.c4
 # Run once for tests: c4 run src/main.c4
@@ -99,9 +99,9 @@ class _MockReq {{
 log("smoke", health=handler(_MockReq("GET", "/health")))
 
 serve handler on :8080
-'''
+"""
 
-_HTTP_SERVICE_TEST = '''\
+_HTTP_SERVICE_TEST = """\
 # tests/test_handler.c4
 use cobra4.stdlib.test as t
 use main
@@ -111,16 +111,14 @@ fn test_health() {{
     # Direct call — the `serve` registration doesn't fire under c4 test.
     t.assert_eq("imported", "imported")
 }}
-'''
+"""
 
 
 def http_service(project_name: str) -> dict[str, str]:
     return {
         **_common(project_name),
         "cobra4.toml": (
-            "[project]\n"
-            f'name = "{project_name}"\n'
-            'version = "0.1.0"\n'
+            "[project]\n" f'name = "{project_name}"\n' 'version = "0.1.0"\n'
         ),
         "src/main.c4": _HTTP_SERVICE_MAIN.format(name=project_name),
         "tests/test_handler.c4": _HTTP_SERVICE_TEST,
@@ -144,7 +142,7 @@ def http_service(project_name: str) -> dict[str, str]:
 # 2. etl-pipeline
 # ---------------------------------------------------------------------------
 
-_ETL_MAIN = '''\
+_ETL_MAIN = """\
 # {name} — ETL pipeline starter (cobra4)
 # Run:  c4 run src/main.c4
 
@@ -194,9 +192,9 @@ workflow daily_etl {{
 }}
 
 log("etl done", input=len(rows), output=len(enriched))
-'''
+"""
 
-_ETL_TEST = '''\
+_ETL_TEST = """\
 # tests/test_etl.c4
 use cobra4.stdlib.test as t
 
@@ -211,7 +209,7 @@ fn test_clean_keeps_high_scores() {{
     for r in rows {{ if float(r["score"]) >= 3.0 {{ out.append(r) }} }}
     t.assert_eq(len(out), 2)
 }}
-'''
+"""
 
 
 def etl_pipeline(project_name: str) -> dict[str, str]:
@@ -246,7 +244,7 @@ def etl_pipeline(project_name: str) -> dict[str, str]:
 # 3. agent (LLM)
 # ---------------------------------------------------------------------------
 
-_AGENT_MAIN = '''\
+_AGENT_MAIN = """\
 lang use llm
 use asyncio
 use cobra4.runtime.llm as _llm
@@ -291,9 +289,9 @@ _llm.set_provider(_llm.MockProvider(scripted=[
 
 response = asyncio.run(customer_support("How long does shipping take?"))
 log("agent", response=response)
-'''
+"""
 
-_AGENT_TEST = '''\
+_AGENT_TEST = """\
 # tests/test_agent.c4
 use cobra4.stdlib.test as t
 use cobra4.runtime.llm as _llm
@@ -302,12 +300,12 @@ fn test_mock_returns_scripted() {{
     p = _llm.MockProvider(scripted=[_llm.Response(kind="stop", text="ok")])
     t.assert_eq(len(p.calls), 0)
 }}
-'''
+"""
 
-_AGENT_ENV = '''\
+_AGENT_ENV = """\
 # Copy to .env and fill in for production.
 # ANTHROPIC_API_KEY=sk-ant-...
-'''
+"""
 
 
 def agent(project_name: str) -> dict[str, str]:
@@ -322,7 +320,7 @@ def agent(project_name: str) -> dict[str, str]:
             'plugins = ["llm"]\n'
             "\n"
             "[deps]\n"
-            "# anthropic = \">=0.34\"  # for AnthropicProvider in production\n"
+            '# anthropic = ">=0.34"  # for AnthropicProvider in production\n'
         ),
         "src/main.c4": _AGENT_MAIN.format(name=project_name),
         "tests/test_agent.c4": _AGENT_TEST,
@@ -354,7 +352,7 @@ def agent(project_name: str) -> dict[str, str]:
 # 4. daemon
 # ---------------------------------------------------------------------------
 
-_DAEMON_MAIN = '''\
+_DAEMON_MAIN = """\
 # {name} — long-running daemon starter (cobra4)
 # Run:  c4 serve src/main.c4
 # (cron + queue consumer + HTTP — all in one file)
@@ -396,9 +394,9 @@ fn handler(req) {{
 serve handler on :8080
 
 log("daemon ready", service="{name}", endpoint=":8080")
-'''
+"""
 
-_DAEMON_TEST = '''\
+_DAEMON_TEST = """\
 # tests/test_daemon.c4
 use cobra4.stdlib.test as t
 
@@ -406,9 +404,9 @@ fn test_state_starts_clean() {{
     s = {{"runs": 0, "errors": 0}}
     t.assert_eq(s["runs"], 0)
 }}
-'''
+"""
 
-_DAEMON_DEPLOY = '''\
+_DAEMON_DEPLOY = """\
 # deploy.c4 — production deploy
 # Run:  COBRA4_DEPLOY_DRY_RUN=0 c4 run deploy.c4
 
@@ -422,16 +420,14 @@ deploy main.handler to aws.lambda(
 ) {{
     env from ".env"
 }}
-'''
+"""
 
 
 def daemon(project_name: str) -> dict[str, str]:
     return {
         **_common(project_name),
         "cobra4.toml": (
-            "[project]\n"
-            f'name = "{project_name}"\n'
-            'version = "0.1.0"\n'
+            "[project]\n" f'name = "{project_name}"\n' 'version = "0.1.0"\n'
         ),
         "src/main.c4": _DAEMON_MAIN.format(name=project_name),
         "tests/test_daemon.c4": _DAEMON_TEST,
