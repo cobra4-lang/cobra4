@@ -1258,6 +1258,9 @@ def _html() -> str:
   --bg: #f7f8fb;
   --surface: #ffffff;
   --surface-2: #eef3f6;
+  --panel-bg: #f8fafb;
+  --editor-bg: #fbfcfd;
+  --editor-ink: #101820;
   --ink: #172026;
   --muted: #5f6f7a;
   --line: #d8e0e6;
@@ -1268,7 +1271,66 @@ def _html() -> str:
   --ok: #126d3a;
   --code-bg: #101418;
   --code-ink: #e7eef2;
+  --hover-bg: #e9f2f1;
+  --completion-active: #d9edeb;
+  --signature-bg: #fffdf7;
+  --signature-line: #d3b675;
+  --signature-ink: #3b2b00;
+  --signature-strong: #003737;
+  --signature-code-bg: rgba(0, 55, 55, .08);
+  --graph-bg: #f9fbfc;
+  --terminal-bg: #0e1116;
+  --terminal-panel: #151a21;
+  --terminal-line: #2a333d;
+  --terminal-input-line: #34424c;
+  --terminal-ink: #e7eef2;
+  --file-icon-bg: #f8fbfd;
+  --file-icon-line: #9fb0b8;
+  --file-icon-c4: #00796b;
+  --file-icon-py: #3a67a3;
+  --file-icon-md: #8a4b00;
+  --file-icon-json: #7b5aa6;
+  --file-icon-config: #607d8b;
   font-family: Inter, Roboto, "Segoe UI", system-ui, sans-serif;
+}}
+body[data-theme="dark"] {{
+  color-scheme: dark;
+  --bg: #111417;
+  --surface: #181d21;
+  --surface-2: #22292f;
+  --panel-bg: #1d2328;
+  --editor-bg: #101418;
+  --editor-ink: #e7eef2;
+  --ink: #e7eef2;
+  --muted: #a9b7bf;
+  --line: #303940;
+  --primary: #4db6ac;
+  --primary-ink: #062220;
+  --accent: #e1a95f;
+  --error: #ffb4ab;
+  --ok: #86d39d;
+  --code-bg: #0b0f12;
+  --code-ink: #e7eef2;
+  --hover-bg: #203533;
+  --completion-active: #254743;
+  --signature-bg: #282319;
+  --signature-line: #8f7240;
+  --signature-ink: #f6dfb0;
+  --signature-strong: #9ee0d9;
+  --signature-code-bg: rgba(158, 224, 217, .12);
+  --graph-bg: #14191d;
+  --terminal-bg: #080c0f;
+  --terminal-panel: #11181d;
+  --terminal-line: #28323a;
+  --terminal-input-line: #3a4852;
+  --terminal-ink: #e7eef2;
+  --file-icon-bg: #20282e;
+  --file-icon-line: #6f818b;
+  --file-icon-c4: #4db6ac;
+  --file-icon-py: #7fa7d6;
+  --file-icon-md: #e1a95f;
+  --file-icon-json: #b79ad8;
+  --file-icon-config: #9fb0b8;
 }}
 * {{ box-sizing: border-box; }}
 body {{
@@ -1397,7 +1459,7 @@ button, input, textarea {{ font: inherit; }}
 }}
 .treeItem, .snippetItem {{
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   min-height: 28px;
@@ -1407,13 +1469,72 @@ button, input, textarea {{ font: inherit; }}
   font-size: 12px;
 }}
 .treeItem:hover, .snippetItem:hover, .snippetItem.active {{
-  background: #e9f2f1;
+  background: var(--hover-bg);
 }}
 .treeItem span:last-child, .snippetItem span:last-child {{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }}
+.fileIcon {{
+  position: relative;
+  display: inline-block;
+  width: 15px;
+  height: 16px;
+}}
+.fileIcon.dir {{
+  width: 16px;
+  height: 12px;
+  border: 1px solid #b7892d;
+  border-radius: 2px;
+  background: #d9a441;
+}}
+.fileIcon.dir::before {{
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: -4px;
+  width: 8px;
+  height: 5px;
+  border: 1px solid #b7892d;
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  background: #e4b653;
+}}
+.fileIcon.file, .fileIcon.c4, .fileIcon.py, .fileIcon.md, .fileIcon.json, .fileIcon.config {{
+  border: 1px solid var(--file-icon-line);
+  border-radius: 2px;
+  background: var(--file-icon-bg);
+}}
+.fileIcon.file::after, .fileIcon.c4::after, .fileIcon.py::after, .fileIcon.md::after, .fileIcon.json::after, .fileIcon.config::after {{
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: -1px;
+  width: 5px;
+  height: 5px;
+  border-left: 1px solid var(--file-icon-line);
+  border-bottom: 1px solid var(--file-icon-line);
+  background: var(--surface);
+}}
+.fileIcon.c4::before, .fileIcon.py::before, .fileIcon.md::before, .fileIcon.json::before, .fileIcon.config::before {{
+  position: absolute;
+  left: 2px;
+  bottom: 1px;
+  font-size: 6px;
+  font-weight: 700;
+  line-height: 1;
+}}
+.fileIcon.c4 {{ border-color: var(--file-icon-c4); }}
+.fileIcon.c4::before {{ content: "C4"; color: var(--file-icon-c4); }}
+.fileIcon.py {{ border-color: var(--file-icon-py); }}
+.fileIcon.py::before {{ content: "PY"; color: var(--file-icon-py); }}
+.fileIcon.md {{ border-color: var(--file-icon-md); }}
+.fileIcon.md::before {{ content: "MD"; color: var(--file-icon-md); }}
+.fileIcon.json {{ border-color: var(--file-icon-json); }}
+.fileIcon.json::before {{ content: "{{}}"; color: var(--file-icon-json); }}
+.fileIcon.config {{ border-color: var(--file-icon-config); }}
+.fileIcon.config::before {{ content: "*"; color: var(--file-icon-config); }}
 .snippetPanel {{
   grid-template-rows: 40px minmax(110px, .72fr) minmax(190px, 1fr);
 }}
@@ -1429,7 +1550,7 @@ button, input, textarea {{ font: inherit; }}
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 5px;
-  background: #fbfcfd;
+  background: var(--editor-bg);
   color: var(--ink);
   padding: 7px 8px;
   font-size: 12px;
@@ -1485,8 +1606,8 @@ button, input, textarea {{ font: inherit; }}
   border: 0;
   outline: 0;
   padding: 18px;
-  background: #fbfcfd;
-  color: #101820;
+  background: var(--editor-bg);
+  color: var(--editor-ink);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 14px;
   line-height: 1.55;
@@ -1515,7 +1636,7 @@ button, input, textarea {{ font: inherit; }}
   font-size: 13px;
 }}
 .completionItem.active {{
-  background: #d9edeb;
+  background: var(--completion-active);
 }}
 .completionItem span:first-child {{
   overflow: hidden;
@@ -1535,17 +1656,17 @@ button, input, textarea {{ font: inherit; }}
   z-index: 15;
   display: none;
   padding: 10px 12px;
-  background: #fffdf7;
-  border: 1px solid #d3b675;
+  background: var(--signature-bg);
+  border: 1px solid var(--signature-line);
   border-radius: 6px;
   box-shadow: 0 8px 22px rgba(16, 32, 39, .12);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
-  color: #3b2b00;
+  color: var(--signature-ink);
 }}
-.signatureBox strong {{ color: #003737; }}
+.signatureBox strong {{ color: var(--signature-strong); }}
 .signatureBox code {{
-  background: rgba(0, 55, 55, .08);
+  background: var(--signature-code-bg);
   border-radius: 4px;
   padding: 1px 4px;
 }}
@@ -1597,7 +1718,7 @@ pre {{
   border-left: 4px solid var(--line);
   padding: 10px 12px;
   margin-bottom: 10px;
-  background: #f8fafb;
+  background: var(--panel-bg);
   border-radius: 6px;
   white-space: pre-wrap;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -1616,7 +1737,7 @@ pre {{
   align-items: center;
   padding: 9px 10px;
   margin-bottom: 6px;
-  background: #f8fafb;
+  background: var(--panel-bg);
   border: 1px solid var(--line);
   border-radius: 6px;
   cursor: pointer;
@@ -1636,7 +1757,7 @@ pre {{
   min-height: 100%;
   display: grid;
   grid-template-rows: 1fr auto;
-  background: #0e1116;
+  background: var(--terminal-bg);
 }}
 #terminalOutput {{
   min-height: 0;
@@ -1647,17 +1768,17 @@ pre {{
   gap: 8px;
   align-items: center;
   padding: 9px;
-  background: #151a21;
-  border-top: 1px solid #2a333d;
-  color: #d8e5ec;
+  background: var(--terminal-panel);
+  border-top: 1px solid var(--terminal-line);
+  color: var(--terminal-ink);
 }}
 .terminalForm input {{
   min-width: 0;
   height: 34px;
-  border: 1px solid #34424c;
+  border: 1px solid var(--terminal-input-line);
   border-radius: 5px;
-  background: #0e1116;
-  color: #e7eef2;
+  background: var(--terminal-bg);
+  color: var(--terminal-ink);
   padding: 0 10px;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
@@ -1665,7 +1786,7 @@ pre {{
 .graphWrap {{
   height: 100%;
   min-height: 420px;
-  background: #f9fbfc;
+  background: var(--graph-bg);
 }}
 svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
 .edge {{ stroke: #9db0ba; stroke-width: 1.5; marker-end: url(#arrow); }}
@@ -1726,6 +1847,7 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
       <button class="btn" id="formatBtn">Format</button>
       <button class="btn primary" id="runBtn">Run</button>
       <button class="btn" id="newBtn">New</button>
+      <button class="btn" id="themeBtn">Theme</button>
     </div>
   </header>
   <main class="workspace">
@@ -1832,6 +1954,8 @@ let lastSymbols = [];
 let completionState = {{items: [], selected: 0, prefix: ""}};
 let allSnippets = [];
 let selectedSnippetId = null;
+let lastTreeSignature = "";
+let treeRefreshTimer = null;
 
 async function api(path, payload) {{
   const response = await fetch(path, {{
@@ -1847,9 +1971,29 @@ async function getJson(path) {{
   return response.json();
 }}
 
-async function loadProjectTree() {{
+function applyTheme(theme) {{
+  const chosen = theme === "dark" ? "dark" : "light";
+  document.body.dataset.theme = chosen;
+  localStorage.setItem("cobra4-idle-theme", chosen);
+  document.getElementById("themeBtn").textContent = chosen === "dark" ? "Light" : "Dark";
+}}
+
+function initTheme() {{
+  const saved = localStorage.getItem("cobra4-idle-theme");
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  applyTheme(saved || (prefersDark ? "dark" : "light"));
+}}
+
+function toggleTheme() {{
+  applyTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
+}}
+
+async function loadProjectTree(force=false) {{
   const result = await getJson("/api/tree");
   if (!result.ok) return;
+  const signature = JSON.stringify(result.tree);
+  if (!force && signature === lastTreeSignature) return;
+  lastTreeSignature = signature;
   projectRoot.textContent = result.root || "";
   renderFileTree(result.tree);
 }}
@@ -1862,8 +2006,7 @@ function renderFileTree(root) {{
     row.className = "treeItem";
     row.style.paddingLeft = `${{6 + depth * 12}}px`;
     row.dataset.path = node.path || ".";
-    const icon = node.kind === "dir" ? "dir" : node.kind === "file" ? "file" : "...";
-    row.innerHTML = `<span>${{icon}}</span><span>${{escapeHtml(node.name || "")}}</span>`;
+    row.innerHTML = `<span class="fileIcon ${{fileIconClass(node)}}" aria-hidden="true"></span><span>${{escapeHtml(node.name || "")}}</span>`;
     if (node.kind === "file") {{
       row.addEventListener("click", () => {{
         pathInput.value = node.path;
@@ -1874,6 +2017,23 @@ function renderFileTree(root) {{
     (node.children || []).forEach(child => addNode(child, depth + 1));
   }};
   addNode(root);
+}}
+
+function fileIconClass(node) {{
+  if (node.kind === "dir") return "dir";
+  if (node.kind !== "file") return "file";
+  const name = String(node.name || "").toLowerCase();
+  if (name.endsWith(".c4")) return "c4";
+  if (name.endsWith(".py")) return "py";
+  if (name.endsWith(".md")) return "md";
+  if (name.endsWith(".json") || name.endsWith(".jsonl")) return "json";
+  if (name.endsWith(".toml") || name.endsWith(".yml") || name.endsWith(".yaml") || name.startsWith(".")) return "config";
+  return "file";
+}}
+
+function startTreeAutoRefresh() {{
+  clearInterval(treeRefreshTimer);
+  treeRefreshTimer = setInterval(() => loadProjectTree(false), 5000);
 }}
 
 async function loadSnippets() {{
@@ -2421,7 +2581,8 @@ document.getElementById("checkBtn").addEventListener("click", checkNow);
 document.getElementById("formatBtn").addEventListener("click", formatNow);
 document.getElementById("openBtn").addEventListener("click", openPath);
 document.getElementById("saveBtn").addEventListener("click", savePath);
-document.getElementById("refreshTreeBtn").addEventListener("click", loadProjectTree);
+document.getElementById("refreshTreeBtn").addEventListener("click", () => loadProjectTree(true));
+document.getElementById("themeBtn").addEventListener("click", toggleTheme);
 document.getElementById("newSnippetBtn").addEventListener("click", newSnippet);
 document.getElementById("insertSnippetBtn").addEventListener("click", insertSnippetAtCursor);
 document.getElementById("saveSnippetBtn").addEventListener("click", saveSnippet);
@@ -2445,7 +2606,13 @@ fetch("/api/sample").then(r => r.json()).then(sample => {{
   updateCursorStatus();
   compileNow();
 }});
-loadProjectTree();
+initTheme();
+loadProjectTree(true);
+startTreeAutoRefresh();
+window.addEventListener("focus", () => loadProjectTree(false));
+document.addEventListener("visibilitychange", () => {{
+  if (!document.hidden) loadProjectTree(false);
+}});
 loadSnippets();
 </script>
 </body>

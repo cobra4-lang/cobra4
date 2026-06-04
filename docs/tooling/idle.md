@@ -23,6 +23,12 @@ blocks plus project-custom snippets stored in `cobra4.snippets.json`.
 Selecting a snippet and pressing Insert places it at the current editor
 line.
 
+The project tree refreshes automatically while the IDLE is open and when
+the browser window regains focus. File rows use type-specific icons for
+Cobra4 files, directories, Python files, Markdown, JSON, config files,
+and generic files. The top bar includes a light/dark theme toggle, stored
+locally in the browser.
+
 The Terminal tab runs non-interactive shell commands in the project root,
 which is useful for commands such as `git status`, `git push`, `c4 test`,
 and `c4 check --strict src/main.c4`.

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from cobra4 import cli
 from cobra4.idle import (
+    _html,
     build_graph,
     complete_source,
     format_source,
@@ -141,6 +142,15 @@ def test_idle_terminal_command_runs_in_project_root(tmp_path: Path) -> None:
 
     assert result["ok"], result["stderr"]
     assert result["stdout"].strip() == str(tmp_path)
+
+
+def test_idle_ui_includes_theme_icons_and_tree_auto_refresh() -> None:
+    html = _html()
+
+    assert 'id="themeBtn"' in html
+    assert 'body[data-theme="dark"]' in html
+    assert "fileIconClass" in html
+    assert "startTreeAutoRefresh" in html
 
 
 def test_idle_run_source_executes_from_requested_cwd(tmp_path: Path) -> None:
