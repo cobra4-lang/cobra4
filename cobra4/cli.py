@@ -337,7 +337,7 @@ def cmd_repl(args: argparse.Namespace) -> int:  # noqa: ARG001
 
 
 def cmd_idle(args: argparse.Namespace) -> int:
-    """Run the browser-based cobra4 IDLE."""
+    """Run the browser-based Cobra4 Studio."""
     from cobra4.idle import serve as serve_idle
 
     return serve_idle(
@@ -926,12 +926,19 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_repl = sub.add_parser("repl", help="Interactive REPL")
     p_repl.set_defaults(handler=cmd_repl)
 
-    p_idle = sub.add_parser("idle", help="Open the cobra4 browser IDLE")
+    p_idle = sub.add_parser("idle", help="Open Cobra4 Studio (compatibility alias)")
     p_idle.add_argument("--host", default="127.0.0.1")
     p_idle.add_argument("--port", type=int, default=0)
     p_idle.add_argument("--no-browser", action="store_true")
     p_idle.add_argument("--verbose", action="store_true")
     p_idle.set_defaults(handler=cmd_idle)
+
+    p_studio = sub.add_parser("studio", help="Open Cobra4 Studio")
+    p_studio.add_argument("--host", default="127.0.0.1")
+    p_studio.add_argument("--port", type=int, default=0)
+    p_studio.add_argument("--no-browser", action="store_true")
+    p_studio.add_argument("--verbose", action="store_true")
+    p_studio.set_defaults(handler=cmd_idle)
 
     p_lsp = sub.add_parser("lsp", help="Run the cobra4 language server on stdio")
     p_lsp.set_defaults(

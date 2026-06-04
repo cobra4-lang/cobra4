@@ -1,6 +1,6 @@
-"""Local browser-based IDLE for cobra4.
+"""Local browser-based Studio for cobra4.
 
-The app intentionally avoids frontend build tooling. `c4 idle` starts a
+The app intentionally avoids frontend build tooling. `c4 studio` starts a
 localhost HTTP server, serves this single-page UI, and exposes small JSON
 endpoints backed by the same compiler pipeline as the CLI.
 """
@@ -41,7 +41,7 @@ from cobra4.tools.lsp import _Server as LspServer
 from cobra4.typecheck import check as typecheck
 
 SAMPLE_SOURCE = """\
-# Cobra4 IDLE scratch file
+# Cobra4 Studio scratch file
 
 data class User(id: str, name: str)
 
@@ -160,6 +160,22 @@ log("age", value=age)
 """,
     },
 ]
+
+SKIPPED_PROJECT_NAMES = {
+    ".git",
+    ".hg",
+    ".svn",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    "node_modules",
+    "build",
+    "dist",
+    "site",
+    ".mypy_cache",
+    ".ruff_cache",
+}
 
 
 @dataclass
@@ -285,21 +301,6 @@ def project_tree(cwd: str, *, max_entries: int = 800) -> dict[str, Any]:
     """Return a bounded file tree for the current project root."""
 
     root = Path(cwd).resolve()
-    skipped = {
-        ".git",
-        ".hg",
-        ".svn",
-        ".venv",
-        "venv",
-        "__pycache__",
-        ".pytest_cache",
-        "node_modules",
-        "build",
-        "dist",
-        "site",
-        ".mypy_cache",
-        ".ruff_cache",
-    }
     count = 0
 
     def rel(path: Path) -> str:
@@ -322,11 +323,7 @@ def project_tree(cwd: str, *, max_entries: int = 800) -> dict[str, Any]:
         if path.is_dir():
             children: list[dict[str, Any]] = []
             try:
-                entries = [
-                    p
-                    for p in path.iterdir()
-                    if p.name not in skipped and not p.name.endswith(".egg-info")
-                ]
+                entries = [p for p in path.iterdir() if not _skip_project_path(p)]
             except OSError:
                 entries = []
             entries.sort(key=lambda p: (not p.is_dir(), p.name.lower()))
@@ -346,6 +343,78 @@ def project_tree(cwd: str, *, max_entries: int = 800) -> dict[str, Any]:
         return node
 
     return {"ok": True, "root": str(root), "tree": walk(root)}
+
+
+def search_project(
+    cwd: str,
+    query: str,
+    *,
+    max_results: int = 80,
+    max_file_bytes: int = 1_000_000,
+) -> dict[str, Any]:
+    """Search text files under the project root with conservative bounds."""
+
+    root = Path(cwd).resolve()
+    needle = query.strip()
+    if not needle:
+        return {"ok": True, "query": needle, "results": [], "truncated": False}
+    lowered = needle.lower()
+    results: list[dict[str, Any]] = []
+
+    def rel(path: Path) -> str:
+        try:
+            return path.relative_to(root).as_posix()
+        except ValueError:
+            return path.as_posix()
+
+    for path in _iter_project_files(root):
+        try:
+            if path.stat().st_size > max_file_bytes:
+                continue
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line_no, line in enumerate(lines, start=1):
+            if lowered not in line.lower():
+                continue
+            results.append(
+                {
+                    "path": rel(path),
+                    "line": line_no,
+                    "preview": line.strip()[:240],
+                }
+            )
+            if len(results) >= max_results:
+                return {
+                    "ok": True,
+                    "query": needle,
+                    "results": results,
+                    "truncated": True,
+                }
+
+    return {"ok": True, "query": needle, "results": results, "truncated": False}
+
+
+def _skip_project_path(path: Path) -> bool:
+    return path.name in SKIPPED_PROJECT_NAMES or path.name.endswith(".egg-info")
+
+
+def _iter_project_files(root: Path) -> list[Path]:
+    pending = [root]
+    files: list[Path] = []
+    while pending:
+        current = pending.pop()
+        try:
+            entries = [p for p in current.iterdir() if not _skip_project_path(p)]
+        except OSError:
+            continue
+        entries.sort(key=lambda p: (not p.is_dir(), p.name.lower()), reverse=True)
+        for entry in entries:
+            if entry.is_dir():
+                pending.append(entry)
+            elif entry.is_file():
+                files.append(entry)
+    return sorted(files, key=lambda p: p.relative_to(root).as_posix())
 
 
 def load_snippets(cwd: str) -> dict[str, Any]:
@@ -1015,6 +1084,11 @@ class _IdleHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/tree":
             self._send_json(project_tree(self.idle_server.cwd))
             return
+        if parsed.path == "/api/search":
+            params = parse_qs(parsed.query)
+            query = params.get("q", [""])[0]
+            self._send_json(search_project(self.idle_server.cwd, query))
+            return
         if parsed.path == "/api/snippets":
             self._send_json(load_snippets(self.idle_server.cwd))
             return
@@ -1186,7 +1260,7 @@ def serve(
     )
     actual_port = server.server_address[1]
     url = f"http://{host}:{actual_port}/"
-    print(f"Cobra4 IDLE running at {url}")
+    print(f"Cobra4 Studio running at {url}")
     print("Press Ctrl-C to stop.")
     if open_browser:
         threading.Timer(0.2, lambda: webbrowser.open(url)).start()
@@ -1201,7 +1275,7 @@ def serve(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="c4 idle", description="cobra4 IDLE")
+    parser = argparse.ArgumentParser(prog="c4 studio", description="Cobra4 Studio")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--no-browser", action="store_true")
@@ -1251,7 +1325,7 @@ def _html() -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cobra4 IDLE</title>
+<title>Cobra4 Studio</title>
 <style>
 :root {{
   color-scheme: light;
@@ -1427,6 +1501,9 @@ button, input, textarea {{ font: inherit; }}
   grid-template-rows: 40px auto minmax(0, 1fr);
   border-bottom: 1px solid var(--line);
 }}
+.projectPanel {{
+  grid-template-rows: 40px auto auto minmax(0, 1fr);
+}}
 .sideHead {{
   display: flex;
   align-items: center;
@@ -1461,6 +1538,60 @@ button, input, textarea {{ font: inherit; }}
   text-overflow: ellipsis;
   white-space: nowrap;
   border-bottom: 1px solid var(--line);
+}}
+.projectSearch {{
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}}
+.projectSearch input {{
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--editor-bg);
+  color: var(--ink);
+  padding: 0 9px;
+  font-size: 12px;
+}}
+.searchResults {{
+  display: none;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+}}
+.searchResults.active {{
+  display: block;
+}}
+.searchItem {{
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  font-size: 12px;
+}}
+.searchItem:last-child {{
+  border-bottom: 0;
+}}
+.searchItem:hover {{
+  background: var(--hover-bg);
+}}
+.searchItem strong {{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}}
+.searchItem span {{
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
 }}
 .fileTree, .snippetList {{
   min-height: 0;
@@ -2032,6 +2163,54 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
   border-top: 1px solid var(--line);
   border-bottom: 0;
 }}
+.commandDialog {{
+  width: min(680px, 100%);
+  grid-template-rows: auto auto minmax(0, 1fr);
+}}
+.commandSearch {{
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}}
+.commandSearch input {{
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--editor-bg);
+  color: var(--ink);
+  padding: 0 12px;
+  font-size: 14px;
+}}
+.commandList {{
+  min-height: 0;
+  max-height: min(520px, 62vh);
+  overflow: auto;
+  padding: 8px;
+}}
+.commandItem {{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}}
+.commandItem:hover, .commandItem.active {{
+  background: var(--hover-bg);
+}}
+.commandItem strong {{
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}}
+.commandItem span {{
+  color: var(--muted);
+  font-size: 12px;
+}}
 @media (max-width: 860px) {{
   body {{ overflow: auto; }}
   .app {{ min-height: 100vh; height: auto; }}
@@ -2066,7 +2245,7 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
   <header class="bar">
     <div class="brand">
       <img src="/assets/logo-128.png" alt="cobra4 logo">
-      <div><strong>Cobra4 IDLE</strong><span>v{__version__}</span></div>
+      <div><strong>Cobra4 Studio</strong><span>v{__version__}</span></div>
     </div>
     <div class="pathbar">
       <input id="path" value="idle_scratch.c4" aria-label="file path">
@@ -2078,17 +2257,22 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
       <button class="btn" id="formatBtn">Format</button>
       <button class="btn primary" id="runBtn">Run</button>
       <button class="btn" id="newBtn">New</button>
+      <button class="btn" id="commandBtn">Commands</button>
       <button class="btn" id="themeBtn">Theme</button>
     </div>
   </header>
   <main class="workspace">
     <aside class="sidebar">
-      <section class="sidePanel">
+      <section class="sidePanel projectPanel">
         <div class="sideHead">
           <strong>Progetto</strong>
           <button class="miniBtn" id="refreshTreeBtn">Refresh</button>
         </div>
         <div id="projectRoot" class="projectRoot"></div>
+        <div class="projectSearch">
+          <input id="projectSearchInput" autocomplete="off" placeholder="Search project">
+          <div id="projectSearchResults" class="searchResults"></div>
+        </div>
         <div id="fileTree" class="fileTree"></div>
       </section>
       <section class="sidePanel snippetPanel">
@@ -2184,6 +2368,22 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
     </footer>
   </section>
 </div>
+<div class="modal" id="commandPalette" hidden>
+  <div class="modalBackdrop" id="commandPaletteBackdrop"></div>
+  <section class="modalDialog commandDialog" role="dialog" aria-modal="true" aria-labelledby="commandPaletteTitle">
+    <header class="modalHead">
+      <div>
+        <h2 id="commandPaletteTitle">Commands</h2>
+        <span>Run Studio actions without leaving the keyboard</span>
+      </div>
+      <button class="iconBtn" id="closeCommandPaletteBtn" title="Close" aria-label="Close command palette">x</button>
+    </header>
+    <div class="commandSearch">
+      <input id="commandInput" autocomplete="off" placeholder="Type a command">
+    </div>
+    <div id="commandList" class="commandList"></div>
+  </section>
+</div>
 <script>
 const source = document.getElementById("source");
 const pathInput = document.getElementById("path");
@@ -2193,6 +2393,8 @@ const problems = document.getElementById("problems");
 const symbols = document.getElementById("symbols");
 const projectRoot = document.getElementById("projectRoot");
 const fileTree = document.getElementById("fileTree");
+const projectSearchInput = document.getElementById("projectSearchInput");
+const projectSearchResults = document.getElementById("projectSearchResults");
 const snippetList = document.getElementById("snippetList");
 const snippetTitle = document.getElementById("snippetTitle");
 const snippetCategory = document.getElementById("snippetCategory");
@@ -2205,6 +2407,9 @@ const modalSnippetTitle = document.getElementById("modalSnippetTitle");
 const modalSnippetCategory = document.getElementById("modalSnippetCategory");
 const modalSnippetDescription = document.getElementById("modalSnippetDescription");
 const modalSnippetCode = document.getElementById("modalSnippetCode");
+const commandPalette = document.getElementById("commandPalette");
+const commandInput = document.getElementById("commandInput");
+const commandList = document.getElementById("commandList");
 const terminalOutput = document.getElementById("terminalOutput");
 const terminalInput = document.getElementById("terminalInput");
 const completionBox = document.getElementById("completionBox");
@@ -2225,6 +2430,8 @@ let selectedSnippetId = null;
 let lastTreeSignature = "";
 let treeRefreshTimer = null;
 let openTreePaths = new Set(["."]);
+let projectSearchTimer = null;
+let commandState = {{items: [], selected: 0}};
 
 async function api(path, payload) {{
   const response = await fetch(path, {{
@@ -2331,6 +2538,46 @@ function fileIconClass(node) {{
 function startTreeAutoRefresh() {{
   clearInterval(treeRefreshTimer);
   treeRefreshTimer = setInterval(() => loadProjectTree(false), 5000);
+}}
+
+function scheduleProjectSearch() {{
+  clearTimeout(projectSearchTimer);
+  projectSearchTimer = setTimeout(runProjectSearch, 180);
+}}
+
+async function runProjectSearch() {{
+  const query = projectSearchInput.value.trim();
+  if (!query) {{
+    projectSearchResults.classList.remove("active");
+    projectSearchResults.innerHTML = "";
+    return;
+  }}
+  const result = await getJson("/api/search?q=" + encodeURIComponent(query));
+  renderProjectSearchResults(result);
+}}
+
+function renderProjectSearchResults(result) {{
+  const items = result.results || [];
+  projectSearchResults.innerHTML = "";
+  projectSearchResults.classList.add("active");
+  if (!items.length) {{
+    const empty = document.createElement("div");
+    empty.className = "searchItem";
+    empty.innerHTML = "<strong>No results</strong><span></span>";
+    projectSearchResults.appendChild(empty);
+    return;
+  }}
+  for (const item of items) {{
+    const row = document.createElement("div");
+    row.className = "searchItem";
+    row.innerHTML = `<strong>${{escapeHtml(item.path)}}:${{item.line || 1}}</strong><span>${{escapeHtml(item.preview || "")}}</span>`;
+    row.addEventListener("click", async () => {{
+      pathInput.value = item.path;
+      const opened = await openPath();
+      if (opened && opened.ok) goToLine(Number(item.line || 1), 1);
+    }});
+    projectSearchResults.appendChild(row);
+  }}
 }}
 
 async function loadSnippets() {{
@@ -2501,6 +2748,85 @@ function insertSnippetAtCursor(code=null) {{
   source.focus();
   scheduleCompile();
   updateCursorStatus();
+}}
+
+function newScratch() {{
+  pathInput.value = "idle_scratch.c4";
+  source.value = "";
+  hideCompletions();
+  signatureBox.style.display = "none";
+  scheduleCompile();
+  source.focus();
+}}
+
+function commandItems() {{
+  return [
+    {{title: "Run current file", hint: "Ctrl+Enter", run: runNow}},
+    {{title: "Check and lint", hint: "Compile diagnostics", run: checkNow}},
+    {{title: "Format source", hint: "Ctrl+Shift+F", run: formatNow}},
+    {{title: "Save file", hint: "Ctrl+S", run: savePath}},
+    {{title: "New scratch file", hint: "Clear editor", run: newScratch}},
+    {{title: "Show generated Python", hint: "Open Python tab", run: () => setTab("pythonView")}},
+    {{title: "Show graph", hint: "Open Grafica tab", run: () => setTab("graphView")}},
+    {{title: "Open terminal", hint: "Run project commands", run: () => {{ setTab("terminalView"); terminalInput.focus(); }}}},
+    {{title: "Search project", hint: "Focus sidebar search", run: () => projectSearchInput.focus()}},
+    {{title: "New snippet", hint: "Create a custom bolt", run: () => {{ newSnippet(); openSnippetModal(null); }}}},
+    {{title: "Inspect selected snippet", hint: "Open snippet modal", run: () => openSnippetModal(selectedSnippetId)}},
+    {{title: "Toggle theme", hint: "Light or dark", run: toggleTheme}}
+  ];
+}}
+
+function openCommandPalette() {{
+  commandPalette.hidden = false;
+  commandInput.value = "";
+  renderCommandPalette();
+  commandInput.focus();
+}}
+
+function closeCommandPalette() {{
+  commandPalette.hidden = true;
+  source.focus();
+}}
+
+function renderCommandPalette() {{
+  const query = commandInput.value.trim().toLowerCase();
+  const items = commandItems().filter(item => {{
+    const haystack = `${{item.title}} ${{item.hint}}`.toLowerCase();
+    return !query || haystack.includes(query);
+  }});
+  commandState = {{
+    items,
+    selected: Math.min(commandState.selected || 0, Math.max(0, items.length - 1))
+  }};
+  commandList.innerHTML = "";
+  if (!items.length) {{
+    const empty = document.createElement("div");
+    empty.className = "commandItem";
+    empty.innerHTML = "<strong>No commands</strong><span></span>";
+    commandList.appendChild(empty);
+    return;
+  }}
+  items.forEach((item, index) => {{
+    const row = document.createElement("div");
+    row.className = index === commandState.selected ? "commandItem active" : "commandItem";
+    row.innerHTML = `<strong>${{escapeHtml(item.title)}}</strong><span>${{escapeHtml(item.hint)}}</span>`;
+    row.addEventListener("click", () => runSelectedCommand(index));
+    commandList.appendChild(row);
+  }});
+}}
+
+function moveCommandSelection(delta) {{
+  const count = commandState.items.length;
+  if (!count) return;
+  commandState.selected = (commandState.selected + delta + count) % count;
+  renderCommandPalette();
+}}
+
+function runSelectedCommand(index=commandState.selected) {{
+  const item = commandState.items[index];
+  if (!item) return;
+  closeCommandPalette();
+  item.run();
 }}
 
 function setTab(id) {{
@@ -2865,11 +3191,12 @@ async function openPath() {{
   if (!result.ok) {{
     output.textContent = result.error || "open failed";
     setTab("outputView");
-    return;
+    return result;
   }}
   pathInput.value = result.path;
   source.value = result.source;
   scheduleCompile();
+  return result;
 }}
 
 async function savePath() {{
@@ -2955,6 +3282,15 @@ document.getElementById("openBtn").addEventListener("click", openPath);
 document.getElementById("saveBtn").addEventListener("click", savePath);
 document.getElementById("refreshTreeBtn").addEventListener("click", () => loadProjectTree(true));
 document.getElementById("themeBtn").addEventListener("click", toggleTheme);
+document.getElementById("commandBtn").addEventListener("click", openCommandPalette);
+projectSearchInput.addEventListener("input", scheduleProjectSearch);
+projectSearchInput.addEventListener("keydown", event => {{
+  if (event.key === "Escape") {{
+    projectSearchInput.value = "";
+    projectSearchResults.classList.remove("active");
+    projectSearchResults.innerHTML = "";
+  }}
+}});
 document.getElementById("newSnippetBtn").addEventListener("click", newSnippet);
 document.getElementById("insertSnippetBtn").addEventListener("click", () => insertSnippetAtCursor());
 document.getElementById("saveSnippetBtn").addEventListener("click", () => saveSnippet("sidebar"));
@@ -2965,21 +3301,44 @@ document.getElementById("snippetModalBackdrop").addEventListener("click", closeS
 document.getElementById("modalInsertSnippetBtn").addEventListener("click", () => insertSnippetAtCursor(modalSnippetCode.value));
 document.getElementById("modalSaveSnippetBtn").addEventListener("click", () => saveSnippet("modal"));
 document.getElementById("modalDeleteSnippetBtn").addEventListener("click", deleteSnippet);
+document.getElementById("closeCommandPaletteBtn").addEventListener("click", closeCommandPalette);
+document.getElementById("commandPaletteBackdrop").addEventListener("click", closeCommandPalette);
+commandInput.addEventListener("input", () => {{
+  commandState.selected = 0;
+  renderCommandPalette();
+}});
+commandInput.addEventListener("keydown", event => {{
+  if (event.key === "ArrowDown") {{
+    event.preventDefault();
+    moveCommandSelection(1);
+  }} else if (event.key === "ArrowUp") {{
+    event.preventDefault();
+    moveCommandSelection(-1);
+  }} else if (event.key === "Enter") {{
+    event.preventDefault();
+    runSelectedCommand();
+  }} else if (event.key === "Escape") {{
+    event.preventDefault();
+    closeCommandPalette();
+  }}
+}});
 document.getElementById("terminalForm").addEventListener("submit", event => {{
   event.preventDefault();
   runTerminalCommand(terminalInput.value);
 }});
 document.addEventListener("keydown", event => {{
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "p") {{
+    event.preventDefault();
+    openCommandPalette();
+    return;
+  }}
+  if (!commandPalette.hidden && event.key === "Escape") {{
+    closeCommandPalette();
+    return;
+  }}
   if (!snippetModal.hidden && event.key === "Escape") closeSnippetModal();
 }});
-document.getElementById("newBtn").addEventListener("click", () => {{
-  pathInput.value = "idle_scratch.c4";
-  source.value = "";
-  hideCompletions();
-  signatureBox.style.display = "none";
-  scheduleCompile();
-  source.focus();
-}});
+document.getElementById("newBtn").addEventListener("click", newScratch);
 
 fetch("/api/sample").then(r => r.json()).then(sample => {{
   source.value = sample.source;

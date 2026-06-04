@@ -14,6 +14,7 @@ from cobra4.idle import (
     load_snippets,
     project_tree,
     signature_source,
+    search_project,
     run_terminal_command,
     run_source,
     save_custom_snippets,
@@ -118,6 +119,23 @@ def test_idle_project_tree_skips_heavy_dirs(tmp_path: Path) -> None:
     assert ".git" not in names
 
 
+def test_idle_project_search_finds_text_and_skips_heavy_dirs(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.c4").write_text(
+        'fn run() {\n    log("needle")\n}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "config").write_text("needle\n", encoding="utf-8")
+
+    result = search_project(str(tmp_path), "needle")
+
+    assert result["ok"]
+    assert result["results"] == [
+        {"path": "src/main.c4", "line": 2, "preview": 'log("needle")'}
+    ]
+
+
 def test_idle_custom_snippets_roundtrip(tmp_path: Path) -> None:
     saved = save_custom_snippets(
         str(tmp_path),
@@ -148,11 +166,14 @@ def test_idle_terminal_command_runs_in_project_root(tmp_path: Path) -> None:
 def test_idle_ui_includes_theme_icons_and_tree_auto_refresh() -> None:
     html = _html()
 
+    assert "Cobra4 Studio" in html
     assert 'id="themeBtn"' in html
     assert 'body[data-theme="dark"]' in html
     assert "fileIconClass" in html
     assert "startTreeAutoRefresh" in html
     assert "openTreePaths" in html
+    assert 'id="projectSearchInput"' in html
+    assert 'id="commandPalette"' in html
     assert 'id="snippetModal"' in html
     assert 'title="Inspect"' in html
     assert "modalInsertSnippetBtn" in html
@@ -212,6 +233,15 @@ def test_cli_idle_subcommand_wires_options(monkeypatch) -> None:
     assert cli.main(["idle", "--host", "0.0.0.0", "--port", "0", "--no-browser"]) == 0
     assert seen == {
         "host": "0.0.0.0",
+        "port": 0,
+        "no_browser": True,
+        "verbose": False,
+    }
+
+    seen.clear()
+    assert cli.main(["studio", "--no-browser"]) == 0
+    assert seen == {
+        "host": "127.0.0.1",
         "port": 0,
         "no_browser": True,
         "verbose": False,

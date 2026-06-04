@@ -59,7 +59,7 @@ nav:
       - SQL / regex / yaml: plugins/builtin.md
   - Tooling:
       - CLI reference: tooling/cli.md
-      - Cobra4 IDLE: tooling/idle.md
+      - Cobra4 Studio: tooling/idle.md
       - LSP / IDE setup: tooling/lsp.md
       - Test framework: tooling/test.md
   - Examples:
