@@ -17,5 +17,15 @@ The editor also provides LSP-powered completions, live lint diagnostics,
 signature help, hover metadata, formatting, an outline view, and clickable
 diagnostics that jump back to the relevant source line.
 
+The sidebar shows the project file tree rooted at the directory where the
+IDLE was launched. The snippet library contains built-in Cobra4 building
+blocks plus project-custom snippets stored in `cobra4.snippets.json`.
+Selecting a snippet and pressing Insert places it at the current editor
+line.
+
+The Terminal tab runs non-interactive shell commands in the project root,
+which is useful for commands such as `git status`, `git push`, `c4 test`,
+and `c4 check --strict src/main.c4`.
+
 Files are opened and saved relative to the directory where `c4 idle` was
 started, unless an absolute path is supplied.

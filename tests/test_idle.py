@@ -9,8 +9,12 @@ from cobra4.idle import (
     format_source,
     hover_source,
     inspect_source,
+    load_snippets,
+    project_tree,
     signature_source,
+    run_terminal_command,
     run_source,
+    save_custom_snippets,
 )
 from cobra4.parser import parse
 
@@ -96,6 +100,47 @@ greet(
     assert '    return "hi {name}"' in formatted["source"]
     assert signature["signatures"][0]["label"].startswith("greet(")
     assert "**greet**" in hover
+
+
+def test_idle_project_tree_skips_heavy_dirs(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.c4").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "config").write_text("[core]\n", encoding="utf-8")
+
+    result = project_tree(str(tmp_path))
+
+    assert result["ok"]
+    names = {child["name"] for child in result["tree"]["children"]}
+    assert "src" in names
+    assert ".git" not in names
+
+
+def test_idle_custom_snippets_roundtrip(tmp_path: Path) -> None:
+    saved = save_custom_snippets(
+        str(tmp_path),
+        [
+            {
+                "title": "My bolt",
+                "category": "Custom",
+                "description": "Reusable custom code.",
+                "code": 'log("bolt")',
+            }
+        ],
+    )
+    loaded = load_snippets(str(tmp_path))
+
+    assert saved["ok"]
+    custom = [item for item in loaded["snippets"] if item.get("custom")]
+    assert custom[0]["title"] == "My bolt"
+    assert custom[0]["code"].endswith("\n")
+
+
+def test_idle_terminal_command_runs_in_project_root(tmp_path: Path) -> None:
+    result = run_terminal_command("pwd", cwd=str(tmp_path), timeout=10)
+
+    assert result["ok"], result["stderr"]
+    assert result["stdout"].strip() == str(tmp_path)
 
 
 def test_idle_run_source_executes_from_requested_cwd(tmp_path: Path) -> None:

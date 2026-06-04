@@ -59,6 +59,108 @@ save(messages, "./idle_messages.json")
 log("saved", count=len(messages))
 """
 
+DEFAULT_SNIPPETS: list[dict[str, str]] = [
+    {
+        "id": "etl-read-transform-save",
+        "title": "ETL read -> transform -> save",
+        "category": "Data",
+        "description": "Read rows from one format, transform them, and save another format.",
+        "code": """\
+rows = read("./data/input.csv")
+
+out = []
+for r in rows {
+    out.append({"name": r["name"].upper(), "age": int(r["age"])})
+}
+
+save(out, "./out/output.json")
+log("etl done", input=len(rows), output=len(out))
+""",
+    },
+    {
+        "id": "http-handler",
+        "title": "HTTP handler",
+        "category": "Service",
+        "description": "Pattern-match method/path pairs and register a local HTTP handler.",
+        "code": """\
+fn handler(req) {
+    match (req.method, req.path) {
+        case ("GET", "/health") { return {"ok": True} }
+        case _ { return (404, {"error": "not found"}) }
+    }
+}
+
+serve handler on :8080
+""",
+    },
+    {
+        "id": "parallel-healthcheck",
+        "title": "Parallel fan-out",
+        "category": "Concurrency",
+        "description": "Run work across many items and collect the results.",
+        "code": """\
+urls = ["https://www.python.org", "https://www.google.com"]
+
+fn check(url) {
+    try {
+        body = read(url)
+        return {"url": url, "ok": True, "size": len(body)}
+    } catch Exception as e {
+        return {"url": url, "ok": False, "error": str(e)}
+    }
+}
+
+results = each url in urls in parallel(workers=8) { check(url) }
+log("checked", total=len(results))
+""",
+    },
+    {
+        "id": "scheduled-job",
+        "title": "Scheduled job",
+        "category": "Daemon",
+        "description": "Register work that runs under `c4 serve`.",
+        "code": """\
+state = {"ticks": 0}
+
+every 5 seconds {
+    state["ticks"] = state["ticks"] + 1
+    log("tick", n=state["ticks"])
+}
+""",
+    },
+    {
+        "id": "cobra4-test",
+        "title": "Cobra4 test",
+        "category": "Testing",
+        "description": "Use the Cobra4 stdlib test helpers in tests/test_*.c4.",
+        "code": """\
+use cobra4.stdlib.test as t
+
+fn test_example() {
+    t.assert_eq(2 + 2, 4)
+}
+""",
+    },
+    {
+        "id": "result-flow",
+        "title": "Result flow",
+        "category": "Errors",
+        "description": "Return Ok/Err values and propagate failures with `?`.",
+        "code": """\
+fn parse_age(row) {
+    try {
+        return Ok(int(row["age"]))
+    } catch Exception as e {
+        return Err(str(e))
+    }
+}
+
+age = parse_age({"age": "42"})?
+log("age", value=age)
+""",
+    },
+]
+
 
 @dataclass
 class IdleDiagnostic:
@@ -177,6 +279,145 @@ def format_source(source: str, *, source_path: str = "<idle>") -> dict[str, Any]
     if directives:
         formatted = "\n".join(directives) + "\n\n" + formatted
     return {"ok": True, "source": formatted, "diagnostics": []}
+
+
+def project_tree(cwd: str, *, max_entries: int = 800) -> dict[str, Any]:
+    """Return a bounded file tree for the current project root."""
+
+    root = Path(cwd).resolve()
+    skipped = {
+        ".git",
+        ".hg",
+        ".svn",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".pytest_cache",
+        "node_modules",
+        "build",
+        "dist",
+        "site",
+        ".mypy_cache",
+        ".ruff_cache",
+    }
+    count = 0
+
+    def rel(path: Path) -> str:
+        try:
+            return "." if path == root else path.relative_to(root).as_posix()
+        except ValueError:
+            return path.as_posix()
+
+    def walk(path: Path) -> dict[str, Any]:
+        nonlocal count
+        count += 1
+        node = {
+            "name": path.name or path.as_posix(),
+            "path": rel(path),
+            "kind": "dir" if path.is_dir() else "file",
+        }
+        if count >= max_entries:
+            node["truncated"] = True
+            return node
+        if path.is_dir():
+            children: list[dict[str, Any]] = []
+            try:
+                entries = [
+                    p
+                    for p in path.iterdir()
+                    if p.name not in skipped and not p.name.endswith(".egg-info")
+                ]
+            except OSError:
+                entries = []
+            entries.sort(key=lambda p: (not p.is_dir(), p.name.lower()))
+            for child in entries:
+                if count >= max_entries:
+                    children.append(
+                        {
+                            "name": "...",
+                            "path": rel(path),
+                            "kind": "more",
+                            "truncated": True,
+                        }
+                    )
+                    break
+                children.append(walk(child))
+            node["children"] = children
+        return node
+
+    return {"ok": True, "root": str(root), "tree": walk(root)}
+
+
+def load_snippets(cwd: str) -> dict[str, Any]:
+    """Load built-in snippets plus project-custom snippets."""
+
+    custom_path = _snippets_path(cwd)
+    custom: list[dict[str, str]] = []
+    if custom_path.exists():
+        try:
+            raw = json.loads(custom_path.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                custom = [_normalize_snippet(item, custom=True) for item in raw]
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            custom = []
+    return {
+        "ok": True,
+        "path": str(custom_path),
+        "snippets": [*_builtin_snippets(), *custom],
+    }
+
+
+def save_custom_snippets(cwd: str, snippets: list[dict[str, Any]]) -> dict[str, Any]:
+    """Persist project-custom snippets under .cobra4/idle_snippets.json."""
+
+    custom = [_normalize_snippet(item, custom=True) for item in snippets]
+    target = _snippets_path(cwd)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(custom, indent=2) + "\n", encoding="utf-8")
+    return {
+        "ok": True,
+        "path": str(target),
+        "snippets": [*_builtin_snippets(), *custom],
+    }
+
+
+def run_terminal_command(
+    command: str,
+    *,
+    cwd: str,
+    timeout: float = 120.0,
+) -> dict[str, Any]:
+    """Run a non-interactive shell command in the project root."""
+
+    command = command.strip()
+    if not command:
+        return {"ok": False, "returncode": 2, "stdout": "", "stderr": "empty command"}
+    env = os.environ.copy()
+    project_root = Path(__file__).resolve().parent.parent
+    env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
+    try:
+        proc = subprocess.run(
+            command,
+            shell=True,
+            cwd=Path(cwd).resolve(),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        return {
+            "ok": False,
+            "returncode": 124,
+            "stdout": e.stdout or "",
+            "stderr": f"Timed out after {timeout:g}s",
+        }
+    return {
+        "ok": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "stdout": proc.stdout,
+        "stderr": proc.stderr,
+    }
 
 
 def run_source(
@@ -648,6 +889,43 @@ def _leading_lang_directives(source: str) -> list[str]:
     return directives
 
 
+def _builtin_snippets() -> list[dict[str, Any]]:
+    return [{**snippet, "custom": False} for snippet in DEFAULT_SNIPPETS]
+
+
+def _snippets_path(cwd: str) -> Path:
+    return Path(cwd).resolve() / "cobra4.snippets.json"
+
+
+def _normalize_snippet(item: dict[str, Any], *, custom: bool) -> dict[str, Any]:
+    title = str(item.get("title") or "Custom snippet").strip()
+    code = str(item.get("code") or "").rstrip() + "\n"
+    if not code.strip():
+        raise ValueError("snippet code cannot be empty")
+    snippet_id = str(item.get("id") or _slug(title)).strip()
+    return {
+        "id": snippet_id or "custom-snippet",
+        "title": title,
+        "category": str(item.get("category") or "Custom").strip() or "Custom",
+        "description": str(item.get("description") or "").strip(),
+        "code": code,
+        "custom": custom,
+    }
+
+
+def _slug(value: str) -> str:
+    chars = []
+    prev_dash = False
+    for ch in value.lower():
+        if ch.isalnum():
+            chars.append(ch)
+            prev_dash = False
+        elif not prev_dash:
+            chars.append("-")
+            prev_dash = True
+    return "".join(chars).strip("-")
+
+
 def _error_payload(error: ParseError | ValueError) -> dict[str, Any]:
     if isinstance(error, ParseError):
         return {
@@ -734,6 +1012,12 @@ class _IdleHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/sample":
             self._send_json({"source": SAMPLE_SOURCE, "path": "idle_scratch.c4"})
             return
+        if parsed.path == "/api/tree":
+            self._send_json(project_tree(self.idle_server.cwd))
+            return
+        if parsed.path == "/api/snippets":
+            self._send_json(load_snippets(self.idle_server.cwd))
+            return
         if parsed.path == "/api/file":
             params = parse_qs(parsed.query)
             path = params.get("path", [""])[0]
@@ -804,6 +1088,28 @@ class _IdleHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/save":
             payload = self._read_json()
             self._handle_save(payload)
+            return
+        if parsed.path == "/api/snippets":
+            payload = self._read_json()
+            try:
+                self._send_json(
+                    save_custom_snippets(
+                        self.idle_server.cwd,
+                        list(payload.get("snippets") or []),
+                    )
+                )
+            except (OSError, ValueError, TypeError) as e:
+                self._send_json({"ok": False, "error": str(e)}, status=400)
+            return
+        if parsed.path == "/api/terminal":
+            payload = self._read_json()
+            self._send_json(
+                run_terminal_command(
+                    payload.get("command", ""),
+                    cwd=self.idle_server.cwd,
+                    timeout=float(payload.get("timeout") or 120),
+                )
+            )
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -1034,6 +1340,111 @@ button, input, textarea {{ font: inherit; }}
   background: #e2f1ef;
   color: #003737;
 }}
+.workspace {{
+  display: grid;
+  grid-template-columns: 286px minmax(0, 1fr);
+  min-height: 0;
+}}
+.sidebar {{
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(180px, 1fr) minmax(260px, 1.15fr);
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}}
+.sidePanel {{
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 40px auto 1fr;
+  border-bottom: 1px solid var(--line);
+}}
+.sideHead {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}}
+.sideHead strong {{
+  font-size: 13px;
+}}
+.miniBtn {{
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 0 8px;
+  font-size: 12px;
+  cursor: pointer;
+}}
+.miniBtn:hover {{ border-color: #9fb3bd; }}
+.projectRoot {{
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}}
+.fileTree, .snippetList {{
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}}
+.treeItem, .snippetItem {{
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}}
+.treeItem:hover, .snippetItem:hover, .snippetItem.active {{
+  background: #e9f2f1;
+}}
+.treeItem span:last-child, .snippetItem span:last-child {{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}}
+.snippetPanel {{
+  grid-template-rows: 40px minmax(110px, .72fr) minmax(190px, 1fr);
+}}
+.snippetEditor {{
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  gap: 7px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+}}
+.snippetEditor input, .snippetEditor textarea {{
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fbfcfd;
+  color: var(--ink);
+  padding: 7px 8px;
+  font-size: 12px;
+}}
+.snippetEditor textarea {{
+  min-height: 58px;
+  resize: none;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  line-height: 1.35;
+}}
+.snippetActions {{
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+}}
 .shell {{
   display: grid;
   grid-template-columns: minmax(320px, 1fr) minmax(360px, 1fr);
@@ -1221,6 +1632,36 @@ pre {{
   color: var(--muted);
   font-size: 11px;
 }}
+.terminalWrap {{
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  background: #0e1116;
+}}
+#terminalOutput {{
+  min-height: 0;
+}}
+.terminalForm {{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  background: #151a21;
+  border-top: 1px solid #2a333d;
+  color: #d8e5ec;
+}}
+.terminalForm input {{
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #34424c;
+  border-radius: 5px;
+  background: #0e1116;
+  color: #e7eef2;
+  padding: 0 10px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+}}
 .graphWrap {{
   height: 100%;
   min-height: 420px;
@@ -1261,6 +1702,8 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
   }}
   .pathbar {{ grid-template-columns: 1fr; }}
   .actions {{ flex-wrap: wrap; }}
+  .workspace {{ grid-template-columns: 1fr; grid-template-rows: minmax(320px, 40vh) minmax(620px, 1fr); }}
+  .sidebar {{ grid-template-rows: minmax(130px, 1fr) minmax(170px, 1fr); border-right: 0; border-bottom: 1px solid var(--line); }}
   .shell {{ grid-template-columns: 1fr; grid-template-rows: 50vh 50vh; }}
   .editorPane {{ border-right: 0; border-bottom: 1px solid var(--line); }}
 }}
@@ -1285,35 +1728,76 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
       <button class="btn" id="newBtn">New</button>
     </div>
   </header>
-  <main class="shell">
-    <section class="editorPane">
-      <div class="paneHead">
-        <h1>Source</h1>
-        <div class="stats">
-          <span id="c4Loc">C4 0</span>
-          <span id="pyLoc">Python 0</span>
-          <span id="savedLoc">Saved 0</span>
-          <span id="lintStatus">OK</span>
-          <span id="cursorPos">1:1</span>
+  <main class="workspace">
+    <aside class="sidebar">
+      <section class="sidePanel">
+        <div class="sideHead">
+          <strong>Progetto</strong>
+          <button class="miniBtn" id="refreshTreeBtn">Refresh</button>
         </div>
-      </div>
-      <textarea id="source" spellcheck="false"></textarea>
-      <div id="completionBox" class="completionBox"></div>
-      <div id="signatureBox" class="signatureBox"></div>
-    </section>
-    <section class="resultPane">
-      <nav class="tabs" aria-label="result tabs">
-        <button class="tab active" data-tab="outputView">Output</button>
-        <button class="tab" data-tab="pythonView">Python</button>
-        <button class="tab" data-tab="graphView">Grafica</button>
-        <button class="tab" data-tab="symbolView">Simboli</button>
-        <button class="tab" data-tab="problemView">Problemi</button>
-      </nav>
-      <section id="outputView" class="view active"><pre id="output"></pre></section>
-      <section id="pythonView" class="view"><pre id="python"></pre></section>
-      <section id="graphView" class="view"><div class="graphWrap" id="graph"></div></section>
-      <section id="symbolView" class="view"><div id="symbols" class="symbolList"></div></section>
-      <section id="problemView" class="view"><div id="problems"></div></section>
+        <div id="projectRoot" class="projectRoot"></div>
+        <div id="fileTree" class="fileTree"></div>
+      </section>
+      <section class="sidePanel snippetPanel">
+        <div class="sideHead">
+          <strong>Snippet</strong>
+          <button class="miniBtn" id="newSnippetBtn">New</button>
+        </div>
+        <div id="snippetList" class="snippetList"></div>
+        <div class="snippetEditor">
+          <input id="snippetTitle" placeholder="Title">
+          <input id="snippetCategory" placeholder="Category">
+          <textarea id="snippetDescription" placeholder="Description"></textarea>
+          <textarea id="snippetCode" placeholder="Cobra4 code"></textarea>
+          <div class="snippetActions">
+            <button class="miniBtn" id="insertSnippetBtn">Insert</button>
+            <button class="miniBtn" id="saveSnippetBtn">Save</button>
+            <button class="miniBtn" id="deleteSnippetBtn">Del</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+    <section class="shell">
+      <section class="editorPane">
+        <div class="paneHead">
+          <h1>Source</h1>
+          <div class="stats">
+            <span id="c4Loc">C4 0</span>
+            <span id="pyLoc">Python 0</span>
+            <span id="savedLoc">Saved 0</span>
+            <span id="lintStatus">OK</span>
+            <span id="cursorPos">1:1</span>
+          </div>
+        </div>
+        <textarea id="source" spellcheck="false"></textarea>
+        <div id="completionBox" class="completionBox"></div>
+        <div id="signatureBox" class="signatureBox"></div>
+      </section>
+      <section class="resultPane">
+        <nav class="tabs" aria-label="result tabs">
+          <button class="tab active" data-tab="outputView">Output</button>
+          <button class="tab" data-tab="pythonView">Python</button>
+          <button class="tab" data-tab="graphView">Grafica</button>
+          <button class="tab" data-tab="symbolView">Simboli</button>
+          <button class="tab" data-tab="problemView">Problemi</button>
+          <button class="tab" data-tab="terminalView">Terminale</button>
+        </nav>
+        <section id="outputView" class="view active"><pre id="output"></pre></section>
+        <section id="pythonView" class="view"><pre id="python"></pre></section>
+        <section id="graphView" class="view"><div class="graphWrap" id="graph"></div></section>
+        <section id="symbolView" class="view"><div id="symbols" class="symbolList"></div></section>
+        <section id="problemView" class="view"><div id="problems"></div></section>
+        <section id="terminalView" class="view">
+          <div class="terminalWrap">
+            <pre id="terminalOutput"></pre>
+            <form id="terminalForm" class="terminalForm">
+              <span>$</span>
+              <input id="terminalInput" autocomplete="off" placeholder="git status">
+              <button class="miniBtn" type="submit">Run</button>
+            </form>
+          </div>
+        </section>
+      </section>
     </section>
   </main>
 </div>
@@ -1324,6 +1808,15 @@ const output = document.getElementById("output");
 const python = document.getElementById("python");
 const problems = document.getElementById("problems");
 const symbols = document.getElementById("symbols");
+const projectRoot = document.getElementById("projectRoot");
+const fileTree = document.getElementById("fileTree");
+const snippetList = document.getElementById("snippetList");
+const snippetTitle = document.getElementById("snippetTitle");
+const snippetCategory = document.getElementById("snippetCategory");
+const snippetDescription = document.getElementById("snippetDescription");
+const snippetCode = document.getElementById("snippetCode");
+const terminalOutput = document.getElementById("terminalOutput");
+const terminalInput = document.getElementById("terminalInput");
 const completionBox = document.getElementById("completionBox");
 const signatureBox = document.getElementById("signatureBox");
 const statusEls = {{
@@ -1337,6 +1830,8 @@ let compileTimer = null;
 let lastGraph = {{nodes: [], edges: []}};
 let lastSymbols = [];
 let completionState = {{items: [], selected: 0, prefix: ""}};
+let allSnippets = [];
+let selectedSnippetId = null;
 
 async function api(path, payload) {{
   const response = await fetch(path, {{
@@ -1345,6 +1840,135 @@ async function api(path, payload) {{
     body: JSON.stringify(payload)
   }});
   return response.json();
+}}
+
+async function getJson(path) {{
+  const response = await fetch(path);
+  return response.json();
+}}
+
+async function loadProjectTree() {{
+  const result = await getJson("/api/tree");
+  if (!result.ok) return;
+  projectRoot.textContent = result.root || "";
+  renderFileTree(result.tree);
+}}
+
+function renderFileTree(root) {{
+  fileTree.innerHTML = "";
+  const addNode = (node, depth=0) => {{
+    if (!node) return;
+    const row = document.createElement("div");
+    row.className = "treeItem";
+    row.style.paddingLeft = `${{6 + depth * 12}}px`;
+    row.dataset.path = node.path || ".";
+    const icon = node.kind === "dir" ? "dir" : node.kind === "file" ? "file" : "...";
+    row.innerHTML = `<span>${{icon}}</span><span>${{escapeHtml(node.name || "")}}</span>`;
+    if (node.kind === "file") {{
+      row.addEventListener("click", () => {{
+        pathInput.value = node.path;
+        openPath();
+      }});
+    }}
+    fileTree.appendChild(row);
+    (node.children || []).forEach(child => addNode(child, depth + 1));
+  }};
+  addNode(root);
+}}
+
+async function loadSnippets() {{
+  const result = await getJson("/api/snippets");
+  if (!result.ok) return;
+  allSnippets = result.snippets || [];
+  selectedSnippetId = selectedSnippetId || (allSnippets[0] && allSnippets[0].id);
+  renderSnippetList();
+  selectSnippet(selectedSnippetId);
+}}
+
+function renderSnippetList() {{
+  snippetList.innerHTML = "";
+  for (const item of allSnippets) {{
+    const row = document.createElement("div");
+    row.className = item.id === selectedSnippetId ? "snippetItem active" : "snippetItem";
+    row.dataset.id = item.id;
+    const label = item.custom ? "custom" : item.category || "built-in";
+    row.innerHTML = `<span>${{escapeHtml(label)}}</span><span>${{escapeHtml(item.title || "")}}</span>`;
+    row.addEventListener("click", () => selectSnippet(item.id));
+    snippetList.appendChild(row);
+  }}
+}}
+
+function selectSnippet(id) {{
+  const item = allSnippets.find(snippet => snippet.id === id) || allSnippets[0];
+  if (!item) return;
+  selectedSnippetId = item.id;
+  snippetTitle.value = item.title || "";
+  snippetCategory.value = item.category || "";
+  snippetDescription.value = item.description || "";
+  snippetCode.value = item.code || "";
+  renderSnippetList();
+}}
+
+function currentSnippetFromEditor() {{
+  const existing = allSnippets.find(item => item.id === selectedSnippetId);
+  const keepId = existing && existing.custom ? existing.id : `custom-${{Date.now()}}`;
+  return {{
+    id: keepId,
+    title: snippetTitle.value || "Custom snippet",
+    category: snippetCategory.value || "Custom",
+    description: snippetDescription.value || "",
+    code: snippetCode.value || "",
+    custom: true
+  }};
+}}
+
+async function saveSnippet() {{
+  const next = currentSnippetFromEditor();
+  const custom = allSnippets.filter(item => item.custom && item.id !== next.id);
+  custom.push(next);
+  const result = await api("/api/snippets", {{snippets: custom}});
+  if (!result.ok) {{
+    output.textContent = result.error || "snippet save failed";
+    setTab("outputView");
+    return;
+  }}
+  allSnippets = result.snippets || [];
+  selectedSnippetId = next.id;
+  renderSnippetList();
+  selectSnippet(next.id);
+}}
+
+async function deleteSnippet() {{
+  const existing = allSnippets.find(item => item.id === selectedSnippetId);
+  if (!existing || !existing.custom) return;
+  const custom = allSnippets.filter(item => item.custom && item.id !== existing.id);
+  const result = await api("/api/snippets", {{snippets: custom}});
+  if (!result.ok) return;
+  allSnippets = result.snippets || [];
+  selectedSnippetId = allSnippets[0] && allSnippets[0].id;
+  renderSnippetList();
+  selectSnippet(selectedSnippetId);
+}}
+
+function newSnippet() {{
+  selectedSnippetId = null;
+  snippetTitle.value = "Custom snippet";
+  snippetCategory.value = "Custom";
+  snippetDescription.value = "";
+  snippetCode.value = "log(\\"hello\\")\\n";
+  renderSnippetList();
+}}
+
+function insertSnippetAtCursor() {{
+  const code = snippetCode.value || "";
+  if (!code.trim()) return;
+  const cursor = source.selectionStart;
+  const lineStart = source.value.lastIndexOf("\\n", Math.max(0, cursor - 1)) + 1;
+  const text = code.replace(/\\s+$/g, "") + "\\n";
+  source.setRangeText(text, lineStart, lineStart, "end");
+  source.focus();
+  scheduleCompile();
+  updateCursorStatus();
 }}
 
 function setTab(id) {{
@@ -1668,6 +2292,19 @@ async function runNow() {{
   output.textContent = chunks.join("\\n");
 }}
 
+async function runTerminalCommand(command) {{
+  command = (command || "").trim();
+  if (!command) return;
+  setTab("terminalView");
+  terminalOutput.textContent += `$ ${{command}}\\n`;
+  terminalInput.value = "";
+  const result = await api("/api/terminal", {{command, timeout: 120}});
+  if (result.stdout) terminalOutput.textContent += result.stdout;
+  if (result.stderr) terminalOutput.textContent += result.stderr;
+  terminalOutput.textContent += `\\n[exit ${{result.returncode}}]\\n\\n`;
+  terminalOutput.scrollTop = terminalOutput.scrollHeight;
+}}
+
 async function checkNow() {{
   const result = await compileNow();
   setTab(result.ok ? "pythonView" : "problemView");
@@ -1711,6 +2348,7 @@ async function savePath() {{
   output.textContent = result.ok ? `saved ${{result.path}}` : (result.error || "save failed");
   if (result.path) pathInput.value = result.path;
   setTab("outputView");
+  loadProjectTree();
 }}
 
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => setTab(btn.dataset.tab)));
@@ -1783,6 +2421,15 @@ document.getElementById("checkBtn").addEventListener("click", checkNow);
 document.getElementById("formatBtn").addEventListener("click", formatNow);
 document.getElementById("openBtn").addEventListener("click", openPath);
 document.getElementById("saveBtn").addEventListener("click", savePath);
+document.getElementById("refreshTreeBtn").addEventListener("click", loadProjectTree);
+document.getElementById("newSnippetBtn").addEventListener("click", newSnippet);
+document.getElementById("insertSnippetBtn").addEventListener("click", insertSnippetAtCursor);
+document.getElementById("saveSnippetBtn").addEventListener("click", saveSnippet);
+document.getElementById("deleteSnippetBtn").addEventListener("click", deleteSnippet);
+document.getElementById("terminalForm").addEventListener("submit", event => {{
+  event.preventDefault();
+  runTerminalCommand(terminalInput.value);
+}});
 document.getElementById("newBtn").addEventListener("click", () => {{
   pathInput.value = "idle_scratch.c4";
   source.value = "";
@@ -1798,6 +2445,8 @@ fetch("/api/sample").then(r => r.json()).then(sample => {{
   updateCursorStatus();
   compileNow();
 }});
+loadProjectTree();
+loadSnippets();
 </script>
 </body>
 </html>
