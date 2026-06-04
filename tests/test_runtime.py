@@ -159,6 +159,30 @@ def test_save_local_txt_then_read():
         assert read(p) == "hello world"
 
 
+def test_save_http_json_uses_put(monkeypatch):
+    calls = []
+
+    class Response:
+        def raise_for_status(self):
+            calls.append(("raise_for_status",))
+
+    def fake_put(url, *, data=None, headers=None, timeout=None):
+        calls.append((url, data, headers, timeout))
+        return Response()
+
+    import requests
+    monkeypatch.setattr(requests, "put", fake_put)
+
+    assert save({"x": 1}, "https://example.test/out.json", timeout=5) == "https://example.test/out.json"
+
+    url, data, headers, timeout = calls[0]
+    assert url == "https://example.test/out.json"
+    assert json.loads(data.decode("utf-8")) == {"x": 1}
+    assert headers == {"content-type": "application/json"}
+    assert timeout == 5
+    assert calls[1] == ("raise_for_status",)
+
+
 def test_user_can_extend_read():
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, "data.fake")

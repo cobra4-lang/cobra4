@@ -23,6 +23,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from cobra4.runtime.smart import SmartFn, make_smart
 
@@ -230,6 +231,50 @@ def _save_local_parquet(value: Any, target: str, **_) -> str:
     return target
 
 
+def _encode_for_ext(value: Any, ext: str) -> tuple[bytes, str]:
+    if ext == "csv":
+        rows = list(value)
+        buf = io.StringIO()
+        if rows and isinstance(rows[0], dict):
+            writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+        else:
+            csv.writer(buf).writerows(rows)
+        return buf.getvalue().encode("utf-8"), "text/csv"
+    if ext == "json":
+        return json.dumps(value, indent=2).encode("utf-8"), "application/json"
+    if ext == "jsonl":
+        return "\n".join(json.dumps(x) for x in value).encode("utf-8"), "application/x-ndjson"
+    if ext in ("yaml", "yml"):
+        try:
+            import yaml  # type: ignore
+        except ImportError as e:  # pragma: no cover
+            raise RuntimeError("yaml support requires `cobra4[yaml]`") from e
+        return yaml.safe_dump(value, sort_keys=False).encode("utf-8"), "application/yaml"
+    return str(value).encode("utf-8"), "text/plain"
+
+
+def _ext_from_uri(target: str) -> str:
+    path = urlparse(target).path or target
+    last = path.rsplit("/", 1)[-1]
+    return last.rsplit(".", 1)[-1].lower() if "." in last else ""
+
+
+def _save_http(value: Any, target: str, **kwargs: Any) -> str:
+    import requests  # local import — keeps top-level fast
+
+    data, content_type = _encode_for_ext(value, _ext_from_uri(target))
+    resp = requests.put(
+        target,
+        data=data,
+        headers={"content-type": content_type},
+        timeout=kwargs.get("timeout", 30),
+    )
+    resp.raise_for_status()
+    return target
+
+
 def _save_s3(value: Any, target: str, **_) -> str:
     import boto3  # type: ignore
 
@@ -310,6 +355,8 @@ def _register_handlers() -> None:
     save.register(_save_local_text, when=_target_is("file", "md"), name="local-md-save")
     save.register(_save_local_parquet, when=_target_is("file", "parquet"), name="local-parquet-save")
     save.register(_save_s3, when=_target_is_scheme("s3"), name="s3-save")
+    save.register(_save_http, when=_target_is_scheme("http"), name="http-save")
+    save.register(_save_http, when=_target_is_scheme("https"), name="https-save")
 
 
 def _target_is(scheme: str, ext: str):
