@@ -34,11 +34,18 @@ pip install "cobra4[aws]"     # boto3 → S3 reads, SQSQueue, AWS Lambda deploy
 pip install "cobra4[data]"    # pandas + pyarrow → parquet & DataFrame
 pip install "cobra4[ssh]"     # paramiko → fleet.run over SSH
 pip install "cobra4[yaml]"    # pyyaml → lang use yaml + read .yml
+pip install "cobra4[sql]"     # SQLAlchemy → lang use sql execution
+pip install "cobra4[llm]"     # anthropic → AnthropicProvider
+pip install "cobra4[graphql]" # graphql-core → GraphQL syntax validation
+pip install "cobra4[prom]"    # prometheus-client → process metrics backend
+pip install "cobra4[redis]"   # redis → RedisQueue
+pip install "cobra4[vault]"   # hvac → Vault secrets backend
+pip install "cobra4[gcp]"     # google-cloud-secret-manager → GCP secrets backend
 pip install "cobra4[otel]"    # OpenTelemetry → log export
 pip install "cobra4[dev]"     # pytest + black for development
 ```
 
-You can combine them: `pip install "cobra4[aws,data,ssh]"`.
+You can combine them: `pip install "cobra4[aws,data,ssh,sql]"`.
 
 ## VS Code extension
 
