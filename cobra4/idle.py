@@ -33,8 +33,11 @@ from cobra4.dispatch_analysis import analyze as dispatch_analyze
 from cobra4.lowering import lower
 from cobra4.parser import ParseError, parse
 from cobra4.plugins import preprocess
+from cobra4.plugins.loader import preserve_plugin_constructs
 from cobra4.resolver import resolve
 from cobra4.tools.fmt import _expr as fmt_expr
+from cobra4.tools.fmt import format_module
+from cobra4.tools.lsp import _Server as LspServer
 from cobra4.typecheck import check as typecheck
 
 SAMPLE_SOURCE = """\
@@ -70,6 +73,7 @@ class IdleCompileResult:
     ok: bool
     python: str = ""
     graph: dict[str, Any] = field(default_factory=dict)
+    symbols: list[dict[str, Any]] = field(default_factory=list)
     metrics: dict[str, int] = field(default_factory=dict)
     diagnostics: list[IdleDiagnostic] = field(default_factory=list)
 
@@ -78,6 +82,7 @@ class IdleCompileResult:
             "ok": self.ok,
             "python": self.python,
             "graph": self.graph,
+            "symbols": self.symbols,
             "metrics": self.metrics,
             "diagnostics": [dataclasses.asdict(d) for d in self.diagnostics],
         }
@@ -114,6 +119,7 @@ def inspect_source(source: str, *, source_path: str = "<idle>") -> IdleCompileRe
         return IdleCompileResult(
             ok=False,
             graph=build_graph(module),
+            symbols=build_symbols(module),
             metrics=_metrics(source, ""),
             diagnostics=diagnostics,
         )
@@ -129,9 +135,48 @@ def inspect_source(source: str, *, source_path: str = "<idle>") -> IdleCompileRe
         ok=True,
         python=code,
         graph=build_graph(module),
+        symbols=build_symbols(module),
         metrics=_metrics(source, code),
         diagnostics=diagnostics,
     )
+
+
+def complete_source(source: str, line: int, column: int) -> dict[str, Any]:
+    """Return LSP-powered completion items for the editor."""
+
+    items = LspServer()._completions(source, line, column)
+    return {"items": _dedupe_completion_items(items)}
+
+
+def signature_source(source: str, line: int, column: int) -> dict[str, Any]:
+    """Return LSP-powered signature help for the editor."""
+
+    return {"signature": LspServer()._signature_help(source, line, column)}
+
+
+def hover_source(source: str, line: int, column: int) -> dict[str, Any]:
+    """Return hover markdown for the identifier at the cursor."""
+
+    return {"contents": LspServer()._hover_info(source, line, column)}
+
+
+def format_source(source: str, *, source_path: str = "<idle>") -> dict[str, Any]:
+    """Format Cobra4 source using the same plugin-aware path as `c4 fmt`."""
+
+    directives = _leading_lang_directives(source)
+    try:
+        sentinel_body, restorers, _plugins = preserve_plugin_constructs(source)
+        module = parse(sentinel_body, source_path=source_path)
+    except (ParseError, ValueError) as e:
+        return {"ok": False, "source": source, "diagnostics": [_error_payload(e)]}
+
+    formatted = format_module(module)
+    for sentinel, original in restorers:
+        formatted = formatted.replace(sentinel + "()", original)
+        formatted = formatted.replace(sentinel, original)
+    if directives:
+        formatted = "\n".join(directives) + "\n\n" + formatted
+    return {"ok": True, "source": formatted, "diagnostics": []}
 
 
 def run_source(
@@ -198,6 +243,89 @@ def run_source(
         }
     )
     return payload
+
+
+def build_symbols(module: N.Module) -> list[dict[str, Any]]:
+    """Return a compact outline for top-level declarations."""
+
+    symbols: list[dict[str, Any]] = []
+    for stmt in module.body:
+        line = stmt.loc.line if stmt.loc else 0
+        if isinstance(stmt, N.FnDecl):
+            symbols.append(
+                {
+                    "name": stmt.name,
+                    "kind": "function",
+                    "line": line,
+                    "detail": f"fn {stmt.name}",
+                }
+            )
+        elif isinstance(stmt, N.ClassDecl):
+            children = [
+                {
+                    "name": inner.name,
+                    "kind": "method",
+                    "line": inner.loc.line if inner.loc else 0,
+                    "detail": f"fn {inner.name}",
+                }
+                for inner in stmt.body
+                if isinstance(inner, N.FnDecl)
+            ]
+            symbols.append(
+                {
+                    "name": stmt.name,
+                    "kind": "class",
+                    "line": line,
+                    "detail": f"class {stmt.name}",
+                    "children": children,
+                }
+            )
+        elif isinstance(stmt, N.DataClassDecl):
+            symbols.append(
+                {
+                    "name": stmt.name,
+                    "kind": "data",
+                    "line": line,
+                    "detail": f"data class {stmt.name}",
+                }
+            )
+        elif isinstance(stmt, N.DataSumDecl):
+            symbols.append(
+                {
+                    "name": stmt.name,
+                    "kind": "data",
+                    "line": line,
+                    "detail": f"data {stmt.name}",
+                    "children": [
+                        {
+                            "name": variant.name,
+                            "kind": "variant",
+                            "line": variant.loc.line if variant.loc else line,
+                            "detail": "variant",
+                        }
+                        for variant in stmt.variants
+                    ],
+                }
+            )
+        elif isinstance(stmt, N.WorkflowDecl):
+            symbols.append(
+                {
+                    "name": stmt.name,
+                    "kind": "workflow",
+                    "line": line,
+                    "detail": f"workflow {stmt.name}",
+                }
+            )
+        elif isinstance(stmt, N.ResourceDecl):
+            symbols.append(
+                {
+                    "name": stmt.name,
+                    "kind": "resource",
+                    "line": line,
+                    "detail": stmt.adapter_path,
+                }
+            )
+    return symbols
 
 
 def build_graph(module: N.Module) -> dict[str, Any]:
@@ -476,6 +604,61 @@ def _inject_plugin_imports(code: str, plugins: list[Any]) -> str:
     return code.replace("# DO NOT EDIT", plugin_imports + "\n# DO NOT EDIT", 1)
 
 
+def _dedupe_completion_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for item in items:
+        label = item.get("label")
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        out.append(
+            {
+                "label": label,
+                "kind": item.get("kind", 1),
+                "detail": item.get("detail") or _completion_kind_name(item.get("kind")),
+                "insertText": item.get("insertText") or label,
+            }
+        )
+    return sorted(out, key=lambda item: item["label"].lower())
+
+
+def _completion_kind_name(kind: Any) -> str:
+    names = {
+        2: "method",
+        3: "function",
+        5: "field",
+        6: "variable",
+        7: "class",
+        14: "keyword",
+    }
+    return names.get(kind, "symbol")
+
+
+def _leading_lang_directives(source: str) -> list[str]:
+    directives: list[str] = []
+    for line in source.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("//"):
+            continue
+        if stripped.startswith("lang use "):
+            directives.append(stripped)
+            continue
+        break
+    return directives
+
+
+def _error_payload(error: ParseError | ValueError) -> dict[str, Any]:
+    if isinstance(error, ParseError):
+        return {
+            "severity": "error",
+            "message": str(error),
+            "line": error.line,
+            "column": error.column,
+        }
+    return {"severity": "error", "message": str(error), "line": None, "column": None}
+
+
 def _compile_error(
     message: str,
     *,
@@ -578,6 +761,45 @@ class _IdleHandler(BaseHTTPRequestHandler):
                 timeout=float(payload.get("timeout") or 10),
             )
             self._send_json(result)
+            return
+        if parsed.path == "/api/complete":
+            payload = self._read_json()
+            self._send_json(
+                complete_source(
+                    payload.get("source", ""),
+                    int(payload.get("line") or 0),
+                    int(payload.get("column") or 0),
+                )
+            )
+            return
+        if parsed.path == "/api/signature":
+            payload = self._read_json()
+            self._send_json(
+                signature_source(
+                    payload.get("source", ""),
+                    int(payload.get("line") or 0),
+                    int(payload.get("column") or 0),
+                )
+            )
+            return
+        if parsed.path == "/api/hover":
+            payload = self._read_json()
+            self._send_json(
+                hover_source(
+                    payload.get("source", ""),
+                    int(payload.get("line") or 0),
+                    int(payload.get("column") or 0),
+                )
+            )
+            return
+        if parsed.path == "/api/format":
+            payload = self._read_json()
+            self._send_json(
+                format_source(
+                    payload.get("source", ""),
+                    source_path=payload.get("path") or "idle_scratch.c4",
+                )
+            )
             return
         if parsed.path == "/api/save":
             payload = self._read_json()
@@ -823,7 +1045,7 @@ button, input, textarea {{ font: inherit; }}
   display: grid;
   grid-template-rows: 44px 1fr;
 }}
-.editorPane {{ border-right: 1px solid var(--line); }}
+.editorPane {{ border-right: 1px solid var(--line); position: relative; }}
 .paneHead {{
   display: flex;
   align-items: center;
@@ -858,6 +1080,63 @@ button, input, textarea {{ font: inherit; }}
   font-size: 14px;
   line-height: 1.55;
   tab-size: 4;
+}}
+#source.hasErrors {{ box-shadow: inset 3px 0 0 var(--error); }}
+.completionBox {{
+  position: absolute;
+  z-index: 20;
+  display: none;
+  width: min(340px, calc(100% - 36px));
+  max-height: 260px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid #b8c8d0;
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(16, 32, 39, .18);
+}}
+.completionItem {{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+}}
+.completionItem.active {{
+  background: #d9edeb;
+}}
+.completionItem span:first-child {{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}}
+.completionItem span:last-child {{
+  color: var(--muted);
+  font-family: Inter, Roboto, "Segoe UI", system-ui, sans-serif;
+  font-size: 11px;
+}}
+.signatureBox {{
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 14px;
+  z-index: 15;
+  display: none;
+  padding: 10px 12px;
+  background: #fffdf7;
+  border: 1px solid #d3b675;
+  border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(16, 32, 39, .12);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  color: #3b2b00;
+}}
+.signatureBox strong {{ color: #003737; }}
+.signatureBox code {{
+  background: rgba(0, 55, 55, .08);
+  border-radius: 4px;
+  padding: 1px 4px;
 }}
 .tabs {{
   display: flex;
@@ -915,6 +1194,33 @@ pre {{
 }}
 .problem.error {{ border-left-color: var(--error); }}
 .problem.warning {{ border-left-color: var(--accent); }}
+.problem[data-line] {{ cursor: pointer; }}
+.symbolList {{
+  padding: 14px;
+}}
+.symbol {{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 10px;
+  margin-bottom: 6px;
+  background: #f8fafb;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}}
+.symbol.child {{ margin-left: 18px; }}
+.symbol strong {{
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}}
+.symbol span {{
+  color: var(--muted);
+  font-size: 11px;
+}}
 .graphWrap {{
   height: 100%;
   min-height: 420px;
@@ -974,6 +1280,7 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
     </div>
     <div class="actions">
       <button class="btn tonal" id="checkBtn">Check</button>
+      <button class="btn" id="formatBtn">Format</button>
       <button class="btn primary" id="runBtn">Run</button>
       <button class="btn" id="newBtn">New</button>
     </div>
@@ -986,20 +1293,26 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
           <span id="c4Loc">C4 0</span>
           <span id="pyLoc">Python 0</span>
           <span id="savedLoc">Saved 0</span>
+          <span id="lintStatus">OK</span>
+          <span id="cursorPos">1:1</span>
         </div>
       </div>
       <textarea id="source" spellcheck="false"></textarea>
+      <div id="completionBox" class="completionBox"></div>
+      <div id="signatureBox" class="signatureBox"></div>
     </section>
     <section class="resultPane">
       <nav class="tabs" aria-label="result tabs">
         <button class="tab active" data-tab="outputView">Output</button>
         <button class="tab" data-tab="pythonView">Python</button>
         <button class="tab" data-tab="graphView">Grafica</button>
+        <button class="tab" data-tab="symbolView">Simboli</button>
         <button class="tab" data-tab="problemView">Problemi</button>
       </nav>
       <section id="outputView" class="view active"><pre id="output"></pre></section>
       <section id="pythonView" class="view"><pre id="python"></pre></section>
       <section id="graphView" class="view"><div class="graphWrap" id="graph"></div></section>
+      <section id="symbolView" class="view"><div id="symbols" class="symbolList"></div></section>
       <section id="problemView" class="view"><div id="problems"></div></section>
     </section>
   </main>
@@ -1010,13 +1323,20 @@ const pathInput = document.getElementById("path");
 const output = document.getElementById("output");
 const python = document.getElementById("python");
 const problems = document.getElementById("problems");
+const symbols = document.getElementById("symbols");
+const completionBox = document.getElementById("completionBox");
+const signatureBox = document.getElementById("signatureBox");
 const statusEls = {{
   c4: document.getElementById("c4Loc"),
   py: document.getElementById("pyLoc"),
-  saved: document.getElementById("savedLoc")
+  saved: document.getElementById("savedLoc"),
+  lint: document.getElementById("lintStatus"),
+  cursor: document.getElementById("cursorPos")
 }};
 let compileTimer = null;
 let lastGraph = {{nodes: [], edges: []}};
+let lastSymbols = [];
+let completionState = {{items: [], selected: 0, prefix: ""}};
 
 async function api(path, payload) {{
   const response = await fetch(path, {{
@@ -1035,6 +1355,7 @@ function setTab(id) {{
     view.classList.toggle("active", view.id === id);
   }});
   if (id === "graphView") renderGraph(lastGraph);
+  if (id === "symbolView") renderSymbols(lastSymbols);
 }}
 
 function setStatus(ok, text) {{
@@ -1060,12 +1381,20 @@ async function compileNow() {{
 function updateCompile(result) {{
   python.textContent = result.python || "";
   lastGraph = result.graph || {{nodes: [], edges: []}};
+  lastSymbols = result.symbols || [];
   const metrics = result.metrics || {{}};
   statusEls.c4.textContent = `C4 ${{metrics.cobra4Loc || 0}}`;
   statusEls.py.textContent = `Python ${{metrics.pythonLoc || 0}}`;
   statusEls.saved.textContent = `Saved ${{metrics.savedLoc || 0}}`;
+  const diagnostics = result.diagnostics || [];
+  const errors = diagnostics.filter(item => item.severity === "error").length;
+  const warnings = diagnostics.filter(item => item.severity === "warning").length;
+  statusEls.lint.textContent = errors ? `${{errors}} error` : warnings ? `${{warnings}} warning` : "OK";
+  statusEls.lint.className = errors ? "status err" : "status ok";
+  source.classList.toggle("hasErrors", errors > 0);
   renderProblems(result.diagnostics || []);
   renderGraph(lastGraph);
+  renderSymbols(lastSymbols);
 }}
 
 function renderProblems(items) {{
@@ -1082,8 +1411,48 @@ function renderProblems(items) {{
     node.className = `problem ${{item.severity || ""}}`;
     const loc = item.line ? `${{item.line}}${{item.column ? ":" + item.column : ""}} ` : "";
     node.textContent = `${{(item.severity || "info").toUpperCase()}} ${{loc}}${{item.message}}`;
+    if (item.line) {{
+      node.dataset.line = item.line;
+      node.dataset.column = item.column || 1;
+      node.addEventListener("click", () => goToLine(Number(node.dataset.line), Number(node.dataset.column)));
+    }}
     problems.appendChild(node);
   }}
+}}
+
+function renderSymbols(items) {{
+  symbols.innerHTML = "";
+  if (!items.length) {{
+    const node = document.createElement("div");
+    node.className = "problem";
+    node.textContent = "OK";
+    symbols.appendChild(node);
+    return;
+  }}
+  const addSymbol = (item, child=false) => {{
+    const node = document.createElement("div");
+    node.className = child ? "symbol child" : "symbol";
+    node.dataset.line = item.line || 1;
+    node.innerHTML = `<strong>${{escapeHtml(item.name || "")}}</strong><span>${{escapeHtml(item.kind || "")}} ${{item.line || ""}}</span>`;
+    node.addEventListener("click", () => goToLine(Number(node.dataset.line), 1));
+    symbols.appendChild(node);
+    (item.children || []).forEach(childItem => addSymbol(childItem, true));
+  }};
+  items.forEach(item => addSymbol(item));
+}}
+
+function escapeHtml(value) {{
+  return String(value || "").replace(/[&<>"]/g, ch => ({{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}}[ch]));
+}}
+
+function goToLine(line, column=1) {{
+  const lines = source.value.split("\\n");
+  let pos = 0;
+  for (let i = 0; i < Math.max(0, line - 1) && i < lines.length; i++) pos += lines[i].length + 1;
+  pos += Math.max(0, column - 1);
+  source.focus();
+  source.setSelectionRange(pos, pos);
+  updateCursorStatus();
 }}
 
 function renderGraph(graph) {{
@@ -1133,6 +1502,156 @@ function renderGraph(graph) {{
   host.innerHTML = svg;
 }}
 
+function cursorPosition() {{
+  const pos = source.selectionStart;
+  const before = source.value.slice(0, pos).split("\\n");
+  return {{line: before.length - 1, column: before[before.length - 1].length}};
+}}
+
+function updateCursorStatus() {{
+  const pos = cursorPosition();
+  statusEls.cursor.textContent = `${{pos.line + 1}}:${{pos.column + 1}}`;
+}}
+
+function currentPrefix() {{
+  let start = source.selectionStart;
+  while (start > 0 && /[A-Za-z0-9_]/.test(source.value[start - 1])) start--;
+  return source.value.slice(start, source.selectionStart);
+}}
+
+async function requestCompletions(force=false) {{
+  if (source.selectionStart !== source.selectionEnd) return hideCompletions();
+  const prefix = currentPrefix();
+  const prev = source.value[source.selectionStart - prefix.length - 1] || "";
+  if (!force && prefix.length < 1 && prev !== ".") return hideCompletions();
+  const pos = cursorPosition();
+  const result = await api("/api/complete", {{
+    source: source.value,
+    line: pos.line,
+    column: pos.column
+  }});
+  const allItems = result.items || [];
+  const items = prev === "."
+    ? allItems
+    : allItems.filter(item => item.label.toLowerCase().startsWith(prefix.toLowerCase()));
+  completionState = {{items: items.slice(0, 60), selected: 0, prefix}};
+  renderCompletions();
+}}
+
+function renderCompletions() {{
+  const items = completionState.items;
+  completionBox.innerHTML = "";
+  if (!items.length) return hideCompletions();
+  const caret = caretCoordinates();
+  completionBox.style.left = `${{caret.left}}px`;
+  completionBox.style.top = `${{caret.top + 22}}px`;
+  completionBox.style.display = "block";
+  items.forEach((item, index) => {{
+    const node = document.createElement("div");
+    node.className = index === completionState.selected ? "completionItem active" : "completionItem";
+    node.innerHTML = `<span>${{escapeHtml(item.label)}}</span><span>${{escapeHtml(item.detail || "")}}</span>`;
+    node.addEventListener("mousedown", event => {{
+      event.preventDefault();
+      completionState.selected = index;
+      applyCompletion();
+    }});
+    completionBox.appendChild(node);
+  }});
+}}
+
+function hideCompletions() {{
+  completionBox.style.display = "none";
+  completionBox.innerHTML = "";
+}}
+
+function applyCompletion() {{
+  const item = completionState.items[completionState.selected];
+  if (!item) return;
+  const prefix = completionState.prefix || "";
+  const start = source.selectionStart - prefix.length;
+  const end = source.selectionEnd;
+  source.setRangeText(item.insertText || item.label, start, end, "end");
+  hideCompletions();
+  source.focus();
+  updateCursorStatus();
+  scheduleCompile();
+}}
+
+function moveCompletion(delta) {{
+  const count = completionState.items.length;
+  if (!count) return;
+  completionState.selected = (completionState.selected + delta + count) % count;
+  renderCompletions();
+}}
+
+function caretCoordinates() {{
+  const rect = source.getBoundingClientRect();
+  const paneRect = source.parentElement.getBoundingClientRect();
+  const text = source.value.slice(0, source.selectionStart);
+  const lines = text.split("\\n");
+  const lineHeight = 21.7;
+  const charWidth = 8.4;
+  const top = rect.top - paneRect.top + 18 + (lines.length - 1) * lineHeight - source.scrollTop;
+  const left = rect.left - paneRect.left + 18 + lines[lines.length - 1].length * charWidth - source.scrollLeft;
+  return {{
+    left: Math.max(18, Math.min(left, paneRect.width - 360)),
+    top: Math.max(48, top)
+  }};
+}}
+
+async function requestSignature() {{
+  const pos = cursorPosition();
+  const result = await api("/api/signature", {{
+    source: source.value,
+    line: pos.line,
+    column: pos.column
+  }});
+  renderSignature(result.signature);
+}}
+
+async function requestHover() {{
+  const pos = cursorPosition();
+  const result = await api("/api/hover", {{
+    source: source.value,
+    line: pos.line,
+    column: pos.column
+  }});
+  renderHover(result.contents);
+}}
+
+function renderSignature(signature) {{
+  if (!signature || !signature.signatures || !signature.signatures.length) {{
+    signatureBox.style.display = "none";
+    signatureBox.innerHTML = "";
+    return;
+  }}
+  const sig = signature.signatures[signature.activeSignature || 0];
+  const active = signature.activeParameter || 0;
+  const params = sig.parameters || [];
+  let label = escapeHtml(sig.label || "");
+  if (params[active] && params[active].label) {{
+    const needle = escapeHtml(params[active].label);
+    label = label.replace(needle, `<strong>${{needle}}</strong>`);
+  }}
+  signatureBox.innerHTML = label;
+  signatureBox.style.display = "block";
+}}
+
+function renderHover(contents) {{
+  if (!contents) return;
+  let html = escapeHtml(contents);
+  html = html.replace(/\\*\\*(.*?)\\*\\*/g, "<strong>$1</strong>");
+  html = html.replace(/`([^`]*)`/g, "<code>$1</code>");
+  signatureBox.innerHTML = html.replace(/\\n/g, "<br>");
+  signatureBox.style.display = "block";
+}}
+
+function hideSignatureSoon() {{
+  setTimeout(() => {{
+    if (!source.matches(":focus")) signatureBox.style.display = "none";
+  }}, 120);
+}}
+
 async function runNow() {{
   setTab("outputView");
   output.textContent = "Running...";
@@ -1152,6 +1671,23 @@ async function runNow() {{
 async function checkNow() {{
   const result = await compileNow();
   setTab(result.ok ? "pythonView" : "problemView");
+}}
+
+async function formatNow() {{
+  const result = await api("/api/format", {{
+    source: source.value,
+    path: pathInput.value
+  }});
+  if (!result.ok) {{
+    renderProblems(result.diagnostics || []);
+    setTab("problemView");
+    return;
+  }}
+  source.value = result.source || source.value;
+  hideCompletions();
+  signatureBox.style.display = "none";
+  await compileNow();
+  source.focus();
 }}
 
 async function openPath() {{
@@ -1178,14 +1714,80 @@ async function savePath() {{
 }}
 
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => setTab(btn.dataset.tab)));
-source.addEventListener("input", scheduleCompile);
+source.addEventListener("input", event => {{
+  scheduleCompile();
+  updateCursorStatus();
+  const text = event.data || "";
+  if (text === "(" || text === ",") requestSignature();
+  if (text === "." || /[A-Za-z_]/.test(text)) requestCompletions(false);
+  if (text === ")" || text === "\\n") signatureBox.style.display = "none";
+}});
+source.addEventListener("click", () => {{
+  updateCursorStatus();
+  hideCompletions();
+  requestHover();
+}});
+source.addEventListener("keyup", event => {{
+  updateCursorStatus();
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) requestHover();
+  if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(event.key)) return;
+  if (event.key === "Escape") {{
+    hideCompletions();
+    signatureBox.style.display = "none";
+  }}
+}});
+source.addEventListener("keydown", event => {{
+  if (completionBox.style.display === "block") {{
+    if (event.key === "ArrowDown") {{
+      event.preventDefault();
+      moveCompletion(1);
+      return;
+    }}
+    if (event.key === "ArrowUp") {{
+      event.preventDefault();
+      moveCompletion(-1);
+      return;
+    }}
+    if (event.key === "Enter" || event.key === "Tab") {{
+      event.preventDefault();
+      applyCompletion();
+      return;
+    }}
+  }}
+  if (event.key === "Tab") {{
+    event.preventDefault();
+    source.setRangeText("    ", source.selectionStart, source.selectionEnd, "end");
+    scheduleCompile();
+    updateCursorStatus();
+    return;
+  }}
+  if (event.ctrlKey || event.metaKey) {{
+    if (event.key === " ") {{
+      event.preventDefault();
+      requestCompletions(true);
+    }} else if (event.key === "Enter") {{
+      event.preventDefault();
+      runNow();
+    }} else if (event.key.toLowerCase() === "s") {{
+      event.preventDefault();
+      savePath();
+    }} else if (event.shiftKey && event.key.toLowerCase() === "f") {{
+      event.preventDefault();
+      formatNow();
+    }}
+  }}
+}});
+source.addEventListener("blur", hideSignatureSoon);
 document.getElementById("runBtn").addEventListener("click", runNow);
 document.getElementById("checkBtn").addEventListener("click", checkNow);
+document.getElementById("formatBtn").addEventListener("click", formatNow);
 document.getElementById("openBtn").addEventListener("click", openPath);
 document.getElementById("saveBtn").addEventListener("click", savePath);
 document.getElementById("newBtn").addEventListener("click", () => {{
   pathInput.value = "idle_scratch.c4";
   source.value = "";
+  hideCompletions();
+  signatureBox.style.display = "none";
   scheduleCompile();
   source.focus();
 }});
@@ -1193,6 +1795,7 @@ document.getElementById("newBtn").addEventListener("click", () => {{
 fetch("/api/sample").then(r => r.json()).then(sample => {{
   source.value = sample.source;
   pathInput.value = sample.path;
+  updateCursorStatus();
   compileNow();
 }});
 </script>

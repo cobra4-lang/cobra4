@@ -3,7 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from cobra4 import cli
-from cobra4.idle import build_graph, inspect_source, run_source
+from cobra4.idle import (
+    build_graph,
+    complete_source,
+    format_source,
+    hover_source,
+    inspect_source,
+    signature_source,
+    run_source,
+)
 from cobra4.parser import parse
 
 
@@ -26,6 +34,7 @@ serve handler on :8080
     assert result.metrics["pythonLoc"] >= result.metrics["cobra4Loc"]
     kinds = {node["kind"] for node in result.graph["nodes"]}
     assert {"function", "io-read", "io-save", "http"} <= kinds
+    assert result.symbols[0]["name"] == "handler"
 
 
 def test_idle_graph_includes_schedules_events_and_resources() -> None:
@@ -39,6 +48,54 @@ on event from queue("jobs") { log("job") }
 
     kinds = {node["kind"] for node in graph["nodes"]}
     assert {"resource", "schedule", "event", "log"} <= kinds
+
+
+def test_idle_editor_completions_include_builtins_scope_and_members() -> None:
+    member_source = """\
+fn greet(user) {
+    return user.
+}
+"""
+    scope_source = """\
+fn greet(user) {
+    return user
+}
+
+message = gr
+"""
+
+    member_items = complete_source(member_source, 1, len("    return user."))["items"]
+    top_level_items = complete_source(scope_source, 4, len("message = gr"))["items"]
+
+    assert any(item["label"] == "upper" for item in member_items)
+    assert any(item["label"] == "greet" for item in top_level_items)
+    assert any(item["label"] == "save" for item in top_level_items)
+
+
+def test_idle_editor_signature_hover_and_formatting() -> None:
+    valid_source = """\
+fn greet(name: str) {
+return "hi {name}"
+}
+
+greet("ada")
+"""
+    incomplete_source = """\
+fn greet(name: str) {
+    return "hi {name}"
+}
+
+greet(
+"""
+
+    formatted = format_source(valid_source)
+    signature = signature_source(incomplete_source, 4, len("greet("))["signature"]
+    hover = hover_source(valid_source, 4, 2)["contents"]
+
+    assert formatted["ok"]
+    assert '    return "hi {name}"' in formatted["source"]
+    assert signature["signatures"][0]["label"].startswith("greet(")
+    assert "**greet**" in hover
 
 
 def test_idle_run_source_executes_from_requested_cwd(tmp_path: Path) -> None:

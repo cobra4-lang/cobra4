@@ -13,5 +13,9 @@ graph tab visualizes imports, functions, IO calls, HTTP handlers,
 schedules, events, workflow tasks, resources, and deploy targets found in
 the Cobra4 AST.
 
+The editor also provides LSP-powered completions, live lint diagnostics,
+signature help, hover metadata, formatting, an outline view, and clickable
+diagnostics that jump back to the relevant source line.
+
 Files are opened and saved relative to the directory where `c4 idle` was
 started, unless an absolute path is supplied.
