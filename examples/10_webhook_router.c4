@@ -15,6 +15,7 @@ lang use sql
 use cobra4.stdlib.test as t
 use hmac as _hmac
 use hashlib as _hashlib
+use time as _time
 
 # ---------- Bootstrap: create table on startup ----------
 
@@ -44,7 +45,7 @@ fn verify_signature(req, secret_value) {
 # ---------- Handlers ----------
 
 fn handle_health(req) {
-    return {"ok": True, "ts": __import__("time").time()}
+    return {"ok": True, "ts": _time.time()}
 }
 
 fn handle_get_orders(req) {

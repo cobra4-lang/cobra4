@@ -164,15 +164,15 @@ async fn entrypoint() {
     report = aggregate(reviews)
 
     log("review complete", total=report.total_files, summary=report.summary)
-    for i in report.issues {
-        match i.severity {
-            case Error() { log.error("blocking issue", file=i.file, msg=i.message) }
-            case Warn()  { log.warn("warning",         file=i.file, msg=i.message) }
-            case Info()  { log("info",                 file=i.file, msg=i.message) }
+    for issue in report.issues {
+        match issue.severity {
+            case Error() { log.error("blocking issue", file=issue.file, msg=issue.message) }
+            case Warn()  { log.warn("warning",         file=issue.file, msg=issue.message) }
+            case Info()  { log("info",                 file=issue.file, msg=issue.message) }
         }
     }
 
-    flat = each i in report.issues { {"file": i.file, "msg": i.message} }
+    flat = each flat_issue in report.issues { {"file": flat_issue.file, "msg": flat_issue.message} }
     save({
         "summary": report.summary,
         "issues": flat,
