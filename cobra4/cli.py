@@ -40,7 +40,11 @@ from cobra4.plugins.loader import preserve_plugin_constructs
 
 def _compile_file(path: Path) -> tuple[str, "object"]:
     src = path.read_text(encoding="utf-8")
-    pre = preprocess(src)
+    try:
+        pre = preprocess(src)
+    except ValueError as e:
+        sys.stderr.write(str(e) + "\n")
+        sys.exit(2)
     try:
         module = parse(pre.source, source_path=str(path))
     except ParseError as e:
@@ -269,7 +273,11 @@ def cmd_fmt(args: argparse.Namespace) -> int:
 def cmd_check(args: argparse.Namespace) -> int:
     path = Path(args.file)
     src = path.read_text(encoding="utf-8")
-    pre = preprocess(src)
+    try:
+        pre = preprocess(src)
+    except ValueError as e:
+        sys.stderr.write(str(e) + "\n")
+        return 2
     try:
         module = parse(pre.source, source_path=str(path))
     except ParseError as e:
@@ -429,7 +437,11 @@ def cmd_doc(args: argparse.Namespace) -> int:
     """Extract docstrings + signatures from a .c4 file → markdown or HTML."""
     path = Path(args.file)
     src = path.read_text(encoding="utf-8")
-    pre = preprocess(src)
+    try:
+        pre = preprocess(src)
+    except ValueError as e:
+        sys.stderr.write(str(e) + "\n")
+        return 2
     try:
         module = parse(pre.source, source_path=str(path))
     except ParseError as e:

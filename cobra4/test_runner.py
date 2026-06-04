@@ -246,7 +246,7 @@ def run_file(path: Path) -> list[TestResult]:
     """Compile and run all test_* functions in a file."""
     try:
         compiled = _compile_test_file(path)
-    except (ParseError, SyntaxError) as e:
+    except (ParseError, SyntaxError, ValueError) as e:
         return [TestResult(
             file=str(path),
             name="<compile>",

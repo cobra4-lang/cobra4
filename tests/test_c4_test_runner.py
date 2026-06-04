@@ -86,3 +86,18 @@ def test_c4_test_failure_traceback_uses_cobra4_source_lines(tmp_path: Path) -> N
     assert 'test_sample.c4", line 4' in proc.stdout
     assert "t.assert_eq(1, 2)" in proc.stdout
     assert "line 27" not in proc.stdout
+
+
+def test_c4_test_unknown_plugin_is_compile_failure(tmp_path: Path) -> None:
+    proc = _run_c4_test(
+        tmp_path,
+        """
+        lang use nope
+        fn test_never_runs() = 1
+        """,
+    )
+
+    assert proc.returncode == 1
+    assert "test_sample.c4::<compile>" in proc.stdout
+    assert "unknown language plugin 'nope'" in proc.stdout
+    assert "Traceback" not in proc.stdout

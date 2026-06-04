@@ -56,6 +56,36 @@ def test_cli_check_parse_error():
         assert "error" in p.stderr.lower()
 
 
+def test_cli_check_unknown_plugin_reports_clean_error():
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "x.c4"
+        src.write_text("lang use nope\nx = 1\n", encoding="utf-8")
+        p = _run_cli("check", str(src), cwd=d)
+        assert p.returncode == 2
+        assert "unknown language plugin 'nope'" in p.stderr
+        assert "Traceback" not in p.stderr
+
+
+def test_cli_run_unknown_plugin_reports_clean_error():
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "x.c4"
+        src.write_text("lang use nope\nx = 1\n", encoding="utf-8")
+        p = _run_cli("run", str(src), cwd=d)
+        assert p.returncode == 2
+        assert "unknown language plugin 'nope'" in p.stderr
+        assert "Traceback" not in p.stderr
+
+
+def test_cli_doc_unknown_plugin_reports_clean_error():
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "x.c4"
+        src.write_text("lang use nope\nfn f() = 1\n", encoding="utf-8")
+        p = _run_cli("doc", str(src), cwd=d)
+        assert p.returncode == 2
+        assert "unknown language plugin 'nope'" in p.stderr
+        assert "Traceback" not in p.stderr
+
+
 def test_cli_run_simple():
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / "x.c4"
