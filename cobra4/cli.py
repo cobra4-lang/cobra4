@@ -523,9 +523,12 @@ def cmd_plugin(args: argparse.Namespace) -> int:
       - ``remove NAME``: pip uninstall the plugin package.
     """
     if args.action == "list":
-        for builtin in ("sql", "regex", "yaml"):
+        import pkgutil
+        import cobra4.plugins.builtin as builtin_pkg
+
+        for mod in pkgutil.iter_modules(builtin_pkg.__path__):
             try:
-                __import__(f"cobra4.plugins.builtin.{builtin}")
+                __import__(f"cobra4.plugins.builtin.{mod.name}")
             except ImportError:
                 pass
         plugins = plugin_list()

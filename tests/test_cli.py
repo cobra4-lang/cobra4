@@ -116,3 +116,10 @@ def test_cli_fmt_validates():
         p = _run_cli("fmt", str(src), cwd=d)
         assert p.returncode == 0
         assert "x = 1\n" in p.stdout
+
+
+def test_cli_plugin_list_includes_all_builtins():
+    p = _run_cli("plugin", "list")
+    assert p.returncode == 0
+    for name in ("graphql", "llm", "prom", "regex", "sql", "yaml"):
+        assert f"{name}:" in p.stdout
