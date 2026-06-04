@@ -336,6 +336,18 @@ def cmd_repl(args: argparse.Namespace) -> int:  # noqa: ARG001
     return run_repl()
 
 
+def cmd_idle(args: argparse.Namespace) -> int:
+    """Run the browser-based cobra4 IDLE."""
+    from cobra4.idle import serve as serve_idle
+
+    return serve_idle(
+        host=args.host,
+        port=args.port,
+        open_browser=not args.no_browser,
+        verbose=args.verbose,
+    )
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """Run a .c4 file as a long-lived daemon.
 
@@ -913,6 +925,13 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p_repl = sub.add_parser("repl", help="Interactive REPL")
     p_repl.set_defaults(handler=cmd_repl)
+
+    p_idle = sub.add_parser("idle", help="Open the cobra4 browser IDLE")
+    p_idle.add_argument("--host", default="127.0.0.1")
+    p_idle.add_argument("--port", type=int, default=8765)
+    p_idle.add_argument("--no-browser", action="store_true")
+    p_idle.add_argument("--verbose", action="store_true")
+    p_idle.set_defaults(handler=cmd_idle)
 
     p_lsp = sub.add_parser("lsp", help="Run the cobra4 language server on stdio")
     p_lsp.set_defaults(

@@ -6,6 +6,7 @@ c4 build  FILE -o OUT.py      # transpile only
 c4 fmt    FILE [-w]           # canonical re-format from AST (-w writes)
 c4 check  FILE [--strict]     # lint + types + dispatch overlap (no exec)
 c4 repl                       # multi-line REPL with completion + history
+c4 idle                       # browser IDLE with generated Python + graph
 c4 lsp                        # language server on stdio
 c4 serve  FILE                # daemon: every / on event from / serve
 c4 test                       # discover & run tests/test_*.c4

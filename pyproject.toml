@@ -70,6 +70,7 @@ include = ["cobra4*"]
 [tool.setuptools.package-data]
 "cobra4" = ["*.lark"]
 "cobra4.stdlib" = ["*.c4"]
+"cobra4.assets" = ["*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
