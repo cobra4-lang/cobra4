@@ -85,6 +85,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     path = Path(args.file)
     code, smap = _compile_file(path)
+    program_args = list(getattr(args, "program_args", []) or [])
     # Write generated module to a temp file so tracebacks can point to a
     # real location; we still rewrite frames via source_map for clarity.
     with tempfile.NamedTemporaryFile(
@@ -97,13 +98,23 @@ def cmd_run(args: argparse.Namespace) -> int:
         proj_root = Path(__file__).resolve().parent.parent
         if str(proj_root) not in sys.path:
             sys.path.insert(0, str(proj_root))
-        runpy.run_path(tmp_path, run_name="__main__")
+        old_argv = sys.argv[:]
+        sys.argv = [str(path), *program_args]
+        ns = {
+            "__name__": "__main__",
+            "__file__": tmp_path,
+            "__package__": None,
+            "__cached__": None,
+        }
+        exec(compile(Path(tmp_path).read_text(encoding="utf-8"), tmp_path, "exec"), ns)
     except SystemExit:
         raise
     except BaseException:
         _print_traceback_with_source_map(tmp_path, smap, str(path))
         return 1
     finally:
+        if "old_argv" in locals():
+            sys.argv = old_argv
         try:
             Path(tmp_path).unlink()
         except OSError:
@@ -759,6 +770,13 @@ def cmd_unimplemented(name: str):
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    run_program_args: list[str] = []
+    if argv and argv[0] == "run" and "--" in argv:
+        sep = argv.index("--")
+        run_program_args = argv[sep + 1:]
+        argv = argv[:sep]
+
     p = argparse.ArgumentParser(prog="c4", description="cobra4 CLI")
     p.add_argument("--version", action="version", version=f"cobra4 {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -864,6 +882,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_doc.set_defaults(handler=cmd_doc)
 
     args = p.parse_args(argv)
+    if getattr(args, "cmd", None) == "run":
+        args.program_args = run_program_args
     return args.handler(args)
 
 

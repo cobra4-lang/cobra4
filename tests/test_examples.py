@@ -93,3 +93,20 @@ def test_example_02_healthcheck_offline_only():
         # Don't fail on non-zero exit: the example exits 0 even if some
         # hosts are unreachable (it logs warnings).
         assert _run_example(EXAMPLES / "02_healthcheck.c4", Path(d)) == 0
+
+
+def test_example_09_log_analyzer_runs_via_cli():
+    """The CLI must not leak `c4 run ...` arguments into user argparse."""
+    with tempfile.TemporaryDirectory() as d:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+        proc = subprocess.run(
+            [sys.executable, "-m", "cobra4.cli", "run", str(EXAMPLES / "09_log_analyzer.c4")],
+            cwd=d,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert (Path(d) / "_log_report.json").exists()

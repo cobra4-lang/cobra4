@@ -65,6 +65,20 @@ def test_cli_run_simple():
         assert "hello cobra4" in p.stdout
 
 
+def test_cli_run_resets_and_forwards_argv():
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "x.c4"
+        src.write_text(
+            "use sys\n"
+            "print(sys.argv[0].endswith(\"x.c4\"))\n"
+            "print(\"|\".join(sys.argv[1:]))\n",
+            encoding="utf-8",
+        )
+        p = _run_cli("run", str(src), "--", "--name", "ada", "pos", cwd=d)
+        assert p.returncode == 0
+        assert p.stdout.splitlines() == ["True", "--name|ada|pos"]
+
+
 def test_cli_fmt_validates():
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / "x.c4"
