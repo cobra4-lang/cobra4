@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -158,6 +159,37 @@ def test_deps_add_list_remove():
         assert "requests" in p.stdout and "2.31.0" in p.stdout
         p = _run_cli("deps", "remove", "requests", cwd=d)
         assert p.returncode == 0
+
+
+def test_deps_install_venv_uses_project_python(tmp_path, monkeypatch):
+    from cobra4.cli import cmd_deps
+
+    (tmp_path / "cobra4.toml").write_text('[deps]\nsix = "1.17.0"\n', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_run(cmd, check=False):
+        calls.append(("run", cmd, check))
+        scripts = "Scripts" if os.name == "nt" else "bin"
+        py_name = "python.exe" if os.name == "nt" else "python"
+        py_path = tmp_path / ".venv-test" / scripts / py_name
+        py_path.parent.mkdir(parents=True, exist_ok=True)
+        py_path.write_text("", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    def fake_call(cmd):
+        calls.append(("call", cmd, None))
+        return 0
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "call", fake_call)
+
+    rc = cmd_deps(SimpleNamespace(action="install", name=None, version=None, venv=".venv-test"))
+
+    assert rc == 0
+    pip_call = calls[-1][1]
+    assert pip_call[1:4] == ["-m", "pip", "install"]
+    assert pip_call[-1] == "six==1.17.0"
 
 
 def test_doc_extracts_signatures():

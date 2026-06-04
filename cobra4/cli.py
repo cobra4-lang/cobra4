@@ -18,6 +18,7 @@ Stubs (real implementation lands in later milestones):
 from __future__ import annotations
 
 import argparse
+import os
 import runpy
 import sys
 import tempfile
