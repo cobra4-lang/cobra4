@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from cobra4 import cli
+from cobra4 import idle as idle_module
 from cobra4.idle import (
     _html,
     build_graph,
@@ -151,6 +152,10 @@ def test_idle_ui_includes_theme_icons_and_tree_auto_refresh() -> None:
     assert 'body[data-theme="dark"]' in html
     assert "fileIconClass" in html
     assert "startTreeAutoRefresh" in html
+    assert "openTreePaths" in html
+    assert 'id="snippetModal"' in html
+    assert 'title="Inspect"' in html
+    assert "modalInsertSnippetBtn" in html
 
 
 def test_idle_run_source_executes_from_requested_cwd(tmp_path: Path) -> None:
@@ -195,6 +200,15 @@ def test_cli_idle_subcommand_wires_options(monkeypatch) -> None:
 
     monkeypatch.setattr(cli, "cmd_idle", fake_cmd_idle)
 
+    assert cli.main(["idle", "--no-browser"]) == 0
+    assert seen == {
+        "host": "127.0.0.1",
+        "port": 0,
+        "no_browser": True,
+        "verbose": False,
+    }
+
+    seen.clear()
     assert cli.main(["idle", "--host", "0.0.0.0", "--port", "0", "--no-browser"]) == 0
     assert seen == {
         "host": "0.0.0.0",
@@ -202,3 +216,18 @@ def test_cli_idle_subcommand_wires_options(monkeypatch) -> None:
         "no_browser": True,
         "verbose": False,
     }
+
+
+def test_idle_module_main_defaults_to_random_port(monkeypatch) -> None:
+    seen = {}
+
+    def fake_serve(**kwargs):
+        seen.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(idle_module, "serve", fake_serve)
+
+    assert idle_module.main(["--no-browser"]) == 0
+    assert seen["host"] == "127.0.0.1"
+    assert seen["port"] == 0
+    assert seen["open_browser"] is False

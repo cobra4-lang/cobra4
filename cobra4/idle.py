@@ -1173,7 +1173,7 @@ class IdleServer(ThreadingHTTPServer):
 def serve(
     *,
     host: str = "127.0.0.1",
-    port: int = 8765,
+    port: int = 0,
     open_browser: bool = True,
     cwd: str | None = None,
     verbose: bool = False,
@@ -1203,7 +1203,7 @@ def serve(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="c4 idle", description="cobra4 IDLE")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -1343,14 +1343,16 @@ body {{
 button, input, textarea {{ font: inherit; }}
 .app {{
   display: grid;
-  grid-template-rows: 64px 1fr;
-  min-height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  min-height: 0;
 }}
 .bar {{
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
   align-items: center;
   gap: 16px;
+  min-height: 64px;
   padding: 0 18px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
@@ -1383,6 +1385,8 @@ button, input, textarea {{ font: inherit; }}
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }}
 .btn {{
   height: 38px;
@@ -1404,21 +1408,23 @@ button, input, textarea {{ font: inherit; }}
 }}
 .workspace {{
   display: grid;
-  grid-template-columns: 286px minmax(0, 1fr);
+  grid-template-columns: clamp(248px, 22vw, 320px) minmax(0, 1fr);
   min-height: 0;
+  overflow: hidden;
 }}
 .sidebar {{
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(180px, 1fr) minmax(260px, 1.15fr);
+  grid-template-rows: minmax(160px, .92fr) minmax(230px, 1.08fr);
   background: var(--surface);
   border-right: 1px solid var(--line);
+  overflow: hidden;
 }}
 .sidePanel {{
   min-height: 0;
   display: grid;
-  grid-template-rows: 40px auto 1fr;
+  grid-template-rows: 40px auto minmax(0, 1fr);
   border-bottom: 1px solid var(--line);
 }}
 .sideHead {{
@@ -1443,6 +1449,10 @@ button, input, textarea {{ font: inherit; }}
   cursor: pointer;
 }}
 .miniBtn:hover {{ border-color: #9fb3bd; }}
+.btn:disabled, .miniBtn:disabled, .iconBtn:disabled {{
+  opacity: .48;
+  cursor: not-allowed;
+}}
 .projectRoot {{
   padding: 8px 10px;
   color: var(--muted);
@@ -1457,9 +1467,9 @@ button, input, textarea {{ font: inherit; }}
   overflow: auto;
   padding: 6px;
 }}
-.treeItem, .snippetItem {{
+.treeItem {{
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 16px 18px minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   min-height: 28px;
@@ -1471,10 +1481,40 @@ button, input, textarea {{ font: inherit; }}
 .treeItem:hover, .snippetItem:hover, .snippetItem.active {{
   background: var(--hover-bg);
 }}
-.treeItem span:last-child, .snippetItem span:last-child {{
+.treeName {{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}}
+.treeToggle {{
+  position: relative;
+  width: 16px;
+  height: 20px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}}
+.treeToggle::before {{
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+}}
+.treeItem.open .treeToggle::before {{
+  transform: rotate(45deg);
+  top: 4px;
+}}
+.treeToggle.empty {{
+  cursor: default;
+}}
+.treeToggle.empty::before {{
+  display: none;
 }}
 .fileIcon {{
   position: relative;
@@ -1536,7 +1576,76 @@ button, input, textarea {{ font: inherit; }}
 .fileIcon.config {{ border-color: var(--file-icon-config); }}
 .fileIcon.config::before {{ content: "*"; color: var(--file-icon-config); }}
 .snippetPanel {{
-  grid-template-rows: 40px minmax(110px, .72fr) minmax(190px, 1fr);
+  grid-template-rows: 40px minmax(140px, .95fr) minmax(180px, 1fr);
+  overflow: hidden;
+}}
+.snippetItem {{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 8px;
+  align-items: center;
+  min-height: 58px;
+  padding: 7px 6px 7px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}}
+.snippetSummary {{
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}}
+.snippetSummary strong {{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}}
+.snippetSummary small {{
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}}
+.snippetSummary span {{
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}}
+.iconBtn {{
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}}
+.iconBtn:hover {{
+  border-color: #9fb3bd;
+}}
+.iconEye {{
+  position: relative;
+  width: 16px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}}
+.iconEye::after {{
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translate(-50%, -50%);
 }}
 .snippetEditor {{
   min-height: 0;
@@ -1545,6 +1654,7 @@ button, input, textarea {{ font: inherit; }}
   gap: 7px;
   padding: 8px;
   border-top: 1px solid var(--line);
+  overflow: auto;
 }}
 .snippetEditor input, .snippetEditor textarea {{
   width: 100%;
@@ -1557,25 +1667,29 @@ button, input, textarea {{ font: inherit; }}
 }}
 .snippetEditor textarea {{
   min-height: 58px;
-  resize: none;
+  max-height: 180px;
+  overflow: auto;
+  resize: vertical;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   line-height: 1.35;
 }}
 .snippetActions {{
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr auto auto;
   gap: 6px;
 }}
 .shell {{
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(360px, 1.04fr) minmax(340px, .96fr);
   min-height: 0;
+  overflow: hidden;
 }}
 .editorPane, .resultPane {{
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 44px 1fr;
+  grid-template-rows: 44px minmax(0, 1fr);
+  overflow: hidden;
 }}
 .editorPane {{ border-right: 1px solid var(--line); position: relative; }}
 .paneHead {{
@@ -1602,9 +1716,11 @@ button, input, textarea {{ font: inherit; }}
 #source {{
   width: 100%;
   height: 100%;
+  min-height: 0;
   resize: none;
   border: 0;
   outline: 0;
+  overflow: auto;
   padding: 18px;
   background: var(--editor-bg);
   color: var(--editor-ink);
@@ -1696,10 +1812,12 @@ button, input, textarea {{ font: inherit; }}
   overflow: auto;
   background: var(--surface);
 }}
-.view.active {{ display: block; }}
+.view.active {{ display: grid; }}
 pre {{
   margin: 0;
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   padding: 18px;
   overflow: auto;
   background: var(--code-bg);
@@ -1709,7 +1827,7 @@ pre {{
   line-height: 1.55;
 }}
 #output {{
-  background: #0e1116;
+  background: var(--terminal-bg);
 }}
 #problems {{
   padding: 14px;
@@ -1812,9 +1930,111 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
 }}
 .status.ok {{ color: var(--ok); }}
 .status.err {{ color: var(--error); }}
+.modal[hidden] {{
+  display: none;
+}}
+.modal {{
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}}
+.modalBackdrop {{
+  position: absolute;
+  inset: 0;
+  background: rgba(9, 15, 18, .42);
+  backdrop-filter: blur(10px);
+}}
+.modalDialog {{
+  position: relative;
+  z-index: 1;
+  width: min(880px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(8, 17, 22, .28);
+}}
+.modalHead, .modalActions {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}}
+.modalHead h2 {{
+  margin: 0;
+  font-size: 15px;
+}}
+.modalHead span {{
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}}
+.modalBody {{
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(180px, .42fr) minmax(280px, 1fr);
+  gap: 12px;
+  padding: 14px;
+}}
+.modalFields {{
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}}
+.modalFields input, .modalFields textarea {{
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--editor-bg);
+  color: var(--ink);
+  padding: 8px 9px;
+  font-size: 13px;
+}}
+.modalFields textarea {{
+  min-height: 160px;
+  resize: vertical;
+  overflow: auto;
+  line-height: 1.4;
+}}
+.modalCode {{
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(320px, 1fr);
+}}
+.modalCode textarea {{
+  width: 100%;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  padding: 12px;
+  resize: none;
+  overflow: auto;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 4;
+}}
+.modalActions {{
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}}
 @media (max-width: 860px) {{
   body {{ overflow: auto; }}
-  .app {{ min-height: 100vh; }}
+  .app {{ min-height: 100vh; height: auto; }}
   .bar {{
     height: auto;
     grid-template-columns: 1fr;
@@ -1827,6 +2047,17 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
   .sidebar {{ grid-template-rows: minmax(130px, 1fr) minmax(170px, 1fr); border-right: 0; border-bottom: 1px solid var(--line); }}
   .shell {{ grid-template-columns: 1fr; grid-template-rows: 50vh 50vh; }}
   .editorPane {{ border-right: 0; border-bottom: 1px solid var(--line); }}
+  .modal {{ padding: 12px; }}
+  .modalDialog {{ max-height: calc(100vh - 24px); }}
+  .modalBody {{ grid-template-columns: 1fr; }}
+  .modalCode {{ grid-template-rows: minmax(260px, 1fr); }}
+}}
+@media (max-height: 740px) and (min-width: 861px) {{
+  .bar {{ min-height: 56px; }}
+  .brand img {{ width: 32px; height: 32px; }}
+  .sidebar {{ grid-template-rows: minmax(130px, .85fr) minmax(190px, 1.15fr); }}
+  .snippetItem {{ min-height: 50px; }}
+  .snippetEditor textarea {{ min-height: 44px; }}
 }}
 </style>
 </head>
@@ -1875,6 +2106,9 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
             <button class="miniBtn" id="insertSnippetBtn">Insert</button>
             <button class="miniBtn" id="saveSnippetBtn">Save</button>
             <button class="miniBtn" id="deleteSnippetBtn">Del</button>
+            <button class="iconBtn" id="inspectSnippetBtn" title="Inspect" aria-label="Inspect snippet">
+              <span class="fa fa-eye iconEye" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
       </section>
@@ -1923,6 +2157,33 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
     </section>
   </main>
 </div>
+<div class="modal" id="snippetModal" hidden>
+  <div class="modalBackdrop" id="snippetModalBackdrop"></div>
+  <section class="modalDialog" role="dialog" aria-modal="true" aria-labelledby="snippetModalTitle">
+    <header class="modalHead">
+      <div>
+        <h2 id="snippetModalTitle">Snippet</h2>
+        <span id="snippetModalMeta"></span>
+      </div>
+      <button class="iconBtn" id="closeSnippetModalBtn" title="Close" aria-label="Close snippet inspector">x</button>
+    </header>
+    <div class="modalBody">
+      <div class="modalFields">
+        <input id="modalSnippetTitle" placeholder="Title">
+        <input id="modalSnippetCategory" placeholder="Category">
+        <textarea id="modalSnippetDescription" placeholder="Description"></textarea>
+      </div>
+      <div class="modalCode">
+        <textarea id="modalSnippetCode" spellcheck="false" placeholder="Cobra4 code"></textarea>
+      </div>
+    </div>
+    <footer class="modalActions">
+      <button class="btn" id="modalInsertSnippetBtn">Insert</button>
+      <button class="btn primary" id="modalSaveSnippetBtn">Save</button>
+      <button class="btn" id="modalDeleteSnippetBtn">Delete</button>
+    </footer>
+  </section>
+</div>
 <script>
 const source = document.getElementById("source");
 const pathInput = document.getElementById("path");
@@ -1937,6 +2198,13 @@ const snippetTitle = document.getElementById("snippetTitle");
 const snippetCategory = document.getElementById("snippetCategory");
 const snippetDescription = document.getElementById("snippetDescription");
 const snippetCode = document.getElementById("snippetCode");
+const snippetModal = document.getElementById("snippetModal");
+const snippetModalTitle = document.getElementById("snippetModalTitle");
+const snippetModalMeta = document.getElementById("snippetModalMeta");
+const modalSnippetTitle = document.getElementById("modalSnippetTitle");
+const modalSnippetCategory = document.getElementById("modalSnippetCategory");
+const modalSnippetDescription = document.getElementById("modalSnippetDescription");
+const modalSnippetCode = document.getElementById("modalSnippetCode");
 const terminalOutput = document.getElementById("terminalOutput");
 const terminalInput = document.getElementById("terminalInput");
 const completionBox = document.getElementById("completionBox");
@@ -1956,6 +2224,7 @@ let allSnippets = [];
 let selectedSnippetId = null;
 let lastTreeSignature = "";
 let treeRefreshTimer = null;
+let openTreePaths = new Set(["."]);
 
 async function api(path, payload) {{
   const response = await fetch(path, {{
@@ -1988,6 +2257,19 @@ function toggleTheme() {{
   applyTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
 }}
 
+function loadTreeState() {{
+  try {{
+    const saved = JSON.parse(localStorage.getItem("cobra4-idle-open-tree") || "[]");
+    openTreePaths = new Set([".", ...saved.filter(Boolean)]);
+  }} catch {{
+    openTreePaths = new Set(["."]);
+  }}
+}}
+
+function saveTreeState() {{
+  localStorage.setItem("cobra4-idle-open-tree", JSON.stringify([...openTreePaths]));
+}}
+
 async function loadProjectTree(force=false) {{
   const result = await getJson("/api/tree");
   if (!result.ok) return;
@@ -2002,19 +2284,34 @@ function renderFileTree(root) {{
   fileTree.innerHTML = "";
   const addNode = (node, depth=0) => {{
     if (!node) return;
+    const isDir = node.kind === "dir";
+    const nodePath = node.path || ".";
+    const isOpen = !isDir || openTreePaths.has(nodePath);
     const row = document.createElement("div");
-    row.className = "treeItem";
+    row.className = `treeItem ${{isDir ? "dirItem" : ""}} ${{isOpen ? "open" : ""}}`;
     row.style.paddingLeft = `${{6 + depth * 12}}px`;
-    row.dataset.path = node.path || ".";
-    row.innerHTML = `<span class="fileIcon ${{fileIconClass(node)}}" aria-hidden="true"></span><span>${{escapeHtml(node.name || "")}}</span>`;
-    if (node.kind === "file") {{
+    row.dataset.path = nodePath;
+    row.innerHTML = `<button class="treeToggle ${{isDir ? "" : "empty"}}" aria-label="${{isOpen ? "Collapse" : "Expand"}}" aria-expanded="${{isOpen}}"></button><span class="fileIcon ${{fileIconClass(node)}}" aria-hidden="true"></span><span class="treeName">${{escapeHtml(node.name || "")}}</span>`;
+    if (isDir) {{
+      row.addEventListener("click", () => {{
+        if (openTreePaths.has(nodePath)) {{
+          if (nodePath !== ".") openTreePaths.delete(nodePath);
+        }} else {{
+          openTreePaths.add(nodePath);
+        }}
+        saveTreeState();
+        renderFileTree(root);
+      }});
+    }} else if (node.kind === "file") {{
       row.addEventListener("click", () => {{
         pathInput.value = node.path;
         openPath();
       }});
     }}
     fileTree.appendChild(row);
-    (node.children || []).forEach(child => addNode(child, depth + 1));
+    if (isOpen) {{
+      (node.children || []).forEach(child => addNode(child, depth + 1));
+    }}
   }};
   addNode(root);
 }}
@@ -2052,38 +2349,105 @@ function renderSnippetList() {{
     row.className = item.id === selectedSnippetId ? "snippetItem active" : "snippetItem";
     row.dataset.id = item.id;
     const label = item.custom ? "custom" : item.category || "built-in";
-    row.innerHTML = `<span>${{escapeHtml(label)}}</span><span>${{escapeHtml(item.title || "")}}</span>`;
+    const description = item.description || item.code || "";
+    row.innerHTML = `<div class="snippetSummary"><small>${{escapeHtml(label)}}</small><strong>${{escapeHtml(item.title || "")}}</strong><span>${{escapeHtml(description)}}</span></div><button class="iconBtn snippetInspectBtn" title="Inspect" aria-label="Inspect snippet"><span class="fa fa-eye iconEye" aria-hidden="true"></span></button>`;
     row.addEventListener("click", () => selectSnippet(item.id));
+    row.querySelector(".snippetInspectBtn").addEventListener("click", event => {{
+      event.stopPropagation();
+      openSnippetModal(item.id);
+    }});
     snippetList.appendChild(row);
   }}
+}}
+
+function selectedSnippet() {{
+  return allSnippets.find(snippet => snippet.id === selectedSnippetId);
+}}
+
+function snippetFields(target="sidebar") {{
+  if (target === "modal") {{
+    return {{
+      title: modalSnippetTitle,
+      category: modalSnippetCategory,
+      description: modalSnippetDescription,
+      code: modalSnippetCode
+    }};
+  }}
+  return {{
+    title: snippetTitle,
+    category: snippetCategory,
+    description: snippetDescription,
+    code: snippetCode
+  }};
+}}
+
+function setSnippetFields(item, target="sidebar") {{
+  const fields = snippetFields(target);
+  fields.title.value = item ? (item.title || "") : "";
+  fields.category.value = item ? (item.category || "") : "";
+  fields.description.value = item ? (item.description || "") : "";
+  fields.code.value = item ? (item.code || "") : "";
 }}
 
 function selectSnippet(id) {{
   const item = allSnippets.find(snippet => snippet.id === id) || allSnippets[0];
   if (!item) return;
   selectedSnippetId = item.id;
-  snippetTitle.value = item.title || "";
-  snippetCategory.value = item.category || "";
-  snippetDescription.value = item.description || "";
-  snippetCode.value = item.code || "";
+  setSnippetFields(item, "sidebar");
   renderSnippetList();
+  syncSnippetActions();
 }}
 
-function currentSnippetFromEditor() {{
-  const existing = allSnippets.find(item => item.id === selectedSnippetId);
+function currentSnippetFromEditor(target="sidebar") {{
+  const fields = snippetFields(target);
+  const existing = selectedSnippet();
   const keepId = existing && existing.custom ? existing.id : `custom-${{Date.now()}}`;
   return {{
     id: keepId,
-    title: snippetTitle.value || "Custom snippet",
-    category: snippetCategory.value || "Custom",
-    description: snippetDescription.value || "",
-    code: snippetCode.value || "",
+    title: fields.title.value || "Custom snippet",
+    category: fields.category.value || "Custom",
+    description: fields.description.value || "",
+    code: fields.code.value || "",
     custom: true
   }};
 }}
 
-async function saveSnippet() {{
-  const next = currentSnippetFromEditor();
+function syncSnippetActions() {{
+  const existing = selectedSnippet();
+  const canDelete = !!(existing && existing.custom);
+  document.getElementById("deleteSnippetBtn").disabled = !canDelete;
+  document.getElementById("modalDeleteSnippetBtn").disabled = !canDelete;
+}}
+
+function openSnippetModal(id=selectedSnippetId) {{
+  if (!id && selectedSnippetId === null) {{
+    const draft = currentSnippetFromEditor("sidebar");
+    setSnippetFields(draft, "modal");
+    snippetModalTitle.textContent = draft.title || "Snippet";
+    snippetModalMeta.textContent = "Unsaved custom";
+    snippetModal.hidden = false;
+    modalSnippetCode.focus();
+    syncSnippetActions();
+    return;
+  }}
+  selectSnippet(id);
+  const item = selectedSnippet();
+  if (!item) return;
+  setSnippetFields(item, "modal");
+  snippetModalTitle.textContent = item.title || "Snippet";
+  snippetModalMeta.textContent = `${{item.custom ? "Custom" : "Built-in"}} - ${{item.category || "Snippet"}}`;
+  snippetModal.hidden = false;
+  modalSnippetCode.focus();
+  syncSnippetActions();
+}}
+
+function closeSnippetModal() {{
+  snippetModal.hidden = true;
+  source.focus();
+}}
+
+async function saveSnippet(target="sidebar") {{
+  const next = currentSnippetFromEditor(target);
   const custom = allSnippets.filter(item => item.custom && item.id !== next.id);
   custom.push(next);
   const result = await api("/api/snippets", {{snippets: custom}});
@@ -2096,10 +2460,11 @@ async function saveSnippet() {{
   selectedSnippetId = next.id;
   renderSnippetList();
   selectSnippet(next.id);
+  if (target === "modal") openSnippetModal(next.id);
 }}
 
 async function deleteSnippet() {{
-  const existing = allSnippets.find(item => item.id === selectedSnippetId);
+  const existing = selectedSnippet();
   if (!existing || !existing.custom) return;
   const custom = allSnippets.filter(item => item.custom && item.id !== existing.id);
   const result = await api("/api/snippets", {{snippets: custom}});
@@ -2108,23 +2473,30 @@ async function deleteSnippet() {{
   selectedSnippetId = allSnippets[0] && allSnippets[0].id;
   renderSnippetList();
   selectSnippet(selectedSnippetId);
+  closeSnippetModal();
 }}
 
 function newSnippet() {{
   selectedSnippetId = null;
-  snippetTitle.value = "Custom snippet";
-  snippetCategory.value = "Custom";
-  snippetDescription.value = "";
-  snippetCode.value = "log(\\"hello\\")\\n";
+  const draft = {{
+    title: "Custom snippet",
+    category: "Custom",
+    description: "",
+    code: "log(\\"hello\\")\\n"
+  }};
+  setSnippetFields(draft, "sidebar");
+  setSnippetFields(draft, "modal");
   renderSnippetList();
+  syncSnippetActions();
 }}
 
-function insertSnippetAtCursor() {{
-  const code = snippetCode.value || "";
-  if (!code.trim()) return;
+function insertSnippetAtCursor(code=null) {{
+  const selectedCode = code === null ? snippetCode.value : code;
+  const codeText = selectedCode || "";
+  if (!codeText.trim()) return;
   const cursor = source.selectionStart;
   const lineStart = source.value.lastIndexOf("\\n", Math.max(0, cursor - 1)) + 1;
-  const text = code.replace(/\\s+$/g, "") + "\\n";
+  const text = codeText.replace(/\\s+$/g, "") + "\\n";
   source.setRangeText(text, lineStart, lineStart, "end");
   source.focus();
   scheduleCompile();
@@ -2584,12 +2956,21 @@ document.getElementById("saveBtn").addEventListener("click", savePath);
 document.getElementById("refreshTreeBtn").addEventListener("click", () => loadProjectTree(true));
 document.getElementById("themeBtn").addEventListener("click", toggleTheme);
 document.getElementById("newSnippetBtn").addEventListener("click", newSnippet);
-document.getElementById("insertSnippetBtn").addEventListener("click", insertSnippetAtCursor);
-document.getElementById("saveSnippetBtn").addEventListener("click", saveSnippet);
+document.getElementById("insertSnippetBtn").addEventListener("click", () => insertSnippetAtCursor());
+document.getElementById("saveSnippetBtn").addEventListener("click", () => saveSnippet("sidebar"));
 document.getElementById("deleteSnippetBtn").addEventListener("click", deleteSnippet);
+document.getElementById("inspectSnippetBtn").addEventListener("click", () => openSnippetModal(selectedSnippetId));
+document.getElementById("closeSnippetModalBtn").addEventListener("click", closeSnippetModal);
+document.getElementById("snippetModalBackdrop").addEventListener("click", closeSnippetModal);
+document.getElementById("modalInsertSnippetBtn").addEventListener("click", () => insertSnippetAtCursor(modalSnippetCode.value));
+document.getElementById("modalSaveSnippetBtn").addEventListener("click", () => saveSnippet("modal"));
+document.getElementById("modalDeleteSnippetBtn").addEventListener("click", deleteSnippet);
 document.getElementById("terminalForm").addEventListener("submit", event => {{
   event.preventDefault();
   runTerminalCommand(terminalInput.value);
+}});
+document.addEventListener("keydown", event => {{
+  if (!snippetModal.hidden && event.key === "Escape") closeSnippetModal();
 }});
 document.getElementById("newBtn").addEventListener("click", () => {{
   pathInput.value = "idle_scratch.c4";
@@ -2607,6 +2988,7 @@ fetch("/api/sample").then(r => r.json()).then(sample => {{
   compileNow();
 }});
 initTheme();
+loadTreeState();
 loadProjectTree(true);
 startTreeAutoRefresh();
 window.addEventListener("focus", () => loadProjectTree(false));

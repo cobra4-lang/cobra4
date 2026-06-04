@@ -928,7 +928,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p_idle = sub.add_parser("idle", help="Open the cobra4 browser IDLE")
     p_idle.add_argument("--host", default="127.0.0.1")
-    p_idle.add_argument("--port", type=int, default=8765)
+    p_idle.add_argument("--port", type=int, default=0)
     p_idle.add_argument("--no-browser", action="store_true")
     p_idle.add_argument("--verbose", action="store_true")
     p_idle.set_defaults(handler=cmd_idle)

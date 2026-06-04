@@ -4,8 +4,12 @@
 
 ```bash
 c4 idle
-c4 idle --port 0 --no-browser
+c4 idle --no-browser
+c4 idle --port 8765
 ```
+
+By default `c4 idle` asks the operating system for a free random local
+port. Pass `--port` only when a fixed port is needed.
 
 The IDLE uses the same compiler path as `c4 build` and `c4 run`. Its
 Python tab shows the generated Python for the current source, and the
@@ -18,16 +22,21 @@ signature help, hover metadata, formatting, an outline view, and clickable
 diagnostics that jump back to the relevant source line.
 
 The sidebar shows the project file tree rooted at the directory where the
-IDLE was launched. The snippet library contains built-in Cobra4 building
-blocks plus project-custom snippets stored in `cobra4.snippets.json`.
-Selecting a snippet and pressing Insert places it at the current editor
-line.
+IDLE was launched. Directories are collapsible, and the open/closed tree
+state is preserved while the tree auto-refreshes. The snippet library
+contains built-in Cobra4 building blocks plus project-custom snippets
+stored in `cobra4.snippets.json`. Selecting a snippet and pressing Insert
+places it at the current editor line.
 
 The project tree refreshes automatically while the IDLE is open and when
 the browser window regains focus. File rows use type-specific icons for
 Cobra4 files, directories, Python files, Markdown, JSON, config files,
 and generic files. The top bar includes a light/dark theme toggle, stored
 locally in the browser.
+
+Snippet rows include an Inspect action that opens a modal with a blurred
+background, larger scrollable fields, and Insert, Save, and Delete
+actions at the bottom. Saving a built-in snippet creates a custom copy.
 
 The Terminal tab runs non-interactive shell commands in the project root,
 which is useful for commands such as `git status`, `git push`, `c4 test`,
