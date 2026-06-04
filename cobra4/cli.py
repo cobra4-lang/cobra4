@@ -490,6 +490,9 @@ def _param_doc(p) -> str:
     s = p.name
     if p.type_ref is not None:
         s += f": {_type_doc(p.type_ref)}"
+    if p.default is not None:
+        from cobra4.tools.fmt import _expr as _fmt_expr
+        s += f" = {_fmt_expr(p.default)}"
     return s
 
 

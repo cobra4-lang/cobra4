@@ -208,6 +208,21 @@ def test_doc_extracts_signatures():
         assert "Sum of two integers." in p.stdout
 
 
+def test_doc_extracts_parameter_defaults():
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "lib.c4"
+        src.write_text(
+            'fn greet(name, excited=False, punctuation="!") {\n'
+            '    "Build a greeting."\n'
+            '    return name + punctuation\n'
+            '}\n',
+            encoding="utf-8",
+        )
+        p = _run_cli("doc", str(src), cwd=d)
+        assert p.returncode == 0
+        assert '## `fn greet(name, excited = False, punctuation = "!")`' in p.stdout
+
+
 def test_stdlib_imports_via_hook():
     """The custom finder lets `cobra4.stdlib.X` resolve to cobra4/stdlib/X.c4."""
     import cobra4.stdlib  # installs the finder
