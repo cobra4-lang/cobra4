@@ -13,6 +13,7 @@ import dataclasses
 from functools import lru_cache
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -190,6 +191,7 @@ class IdleDiagnostic:
 class IdleCompileResult:
     ok: bool
     python: str = ""
+    source_map: dict[str, Any] = field(default_factory=dict)
     graph: dict[str, Any] = field(default_factory=dict)
     symbols: list[dict[str, Any]] = field(default_factory=list)
     metrics: dict[str, int] = field(default_factory=dict)
@@ -199,6 +201,7 @@ class IdleCompileResult:
         return {
             "ok": self.ok,
             "python": self.python,
+            "sourceMap": self.source_map,
             "graph": self.graph,
             "symbols": self.symbols,
             "metrics": self.metrics,
@@ -252,6 +255,7 @@ def inspect_source(source: str, *, source_path: str = "<idle>") -> IdleCompileRe
     return IdleCompileResult(
         ok=True,
         python=code,
+        source_map=_source_map_payload(result.source_map),
         graph=build_graph(module),
         symbols=build_symbols(module),
         metrics=_metrics(source, code),
@@ -395,8 +399,95 @@ def search_project(
     return {"ok": True, "query": needle, "results": results, "truncated": False}
 
 
+def file_action(cwd: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Create, rename, delete, and duplicate project files or folders."""
+
+    action = str(payload.get("action") or "").strip()
+    root = Path(cwd).resolve()
+    path = str(payload.get("path") or "").strip()
+    if not action:
+        return {"ok": False, "error": "missing action"}
+    if not path and action not in {"new_file", "new_dir"}:
+        return {"ok": False, "error": "missing path"}
+
+    try:
+        target = _resolve_user_path(path or ".", str(root))
+        if action in {"new_file", "new_dir"}:
+            target = _resolve_user_path(str(payload.get("path") or ""), str(root))
+            if target.exists():
+                return {"ok": False, "error": "target already exists"}
+            if action == "new_file":
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(str(payload.get("content") or ""), encoding="utf-8")
+            else:
+                target.mkdir(parents=True, exist_ok=False)
+            return {"ok": True, "path": _project_rel(target, root)}
+
+        if target == root:
+            return {"ok": False, "error": "cannot modify project root"}
+        if not target.exists():
+            return {"ok": False, "error": "path does not exist"}
+
+        if action == "delete":
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+            return {"ok": True, "path": _project_rel(target, root)}
+
+        if action == "rename":
+            new_path = str(payload.get("newPath") or "").strip()
+            if not new_path:
+                return {"ok": False, "error": "missing new path"}
+            destination = _resolve_user_path(new_path, str(root))
+            if destination.exists():
+                return {"ok": False, "error": "target already exists"}
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            target.rename(destination)
+            return {"ok": True, "path": _project_rel(destination, root)}
+
+        if action == "duplicate":
+            new_path = str(payload.get("newPath") or "").strip()
+            destination = (
+                _resolve_user_path(new_path, str(root))
+                if new_path
+                else _duplicate_path(target)
+            )
+            if destination.exists():
+                return {"ok": False, "error": "target already exists"}
+            if target.is_dir():
+                shutil.copytree(target, destination)
+            else:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(target, destination)
+            return {"ok": True, "path": _project_rel(destination, root)}
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
+
+    return {"ok": False, "error": f"unknown action: {action}"}
+
+
 def _skip_project_path(path: Path) -> bool:
     return path.name in SKIPPED_PROJECT_NAMES or path.name.endswith(".egg-info")
+
+
+def _project_rel(path: Path, root: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _duplicate_path(path: Path) -> Path:
+    stem = path.name if path.is_dir() else path.stem
+    suffix = "" if path.is_dir() else path.suffix
+    parent = path.parent
+    candidate = parent / f"{stem} copy{suffix}"
+    index = 2
+    while candidate.exists():
+        candidate = parent / f"{stem} copy {index}{suffix}"
+        index += 1
+    return candidate
 
 
 def _iter_project_files(root: Path) -> list[Path]:
@@ -914,6 +1005,18 @@ def _inject_plugin_imports(code: str, plugins: list[Any]) -> str:
     return code.replace("# DO NOT EDIT", plugin_imports + "\n# DO NOT EDIT", 1)
 
 
+def _source_map_payload(source_map: Any) -> dict[str, Any]:
+    mappings: list[dict[str, int]] = []
+    for py_line in sorted(getattr(source_map, "lines", {})):
+        segments = source_map.lines.get(py_line) or []
+        if not segments:
+            continue
+        c4_line = segments[0].c4_line
+        if c4_line:
+            mappings.append({"python": py_line, "cobra4": c4_line})
+    return {"path": getattr(source_map, "cobra4_path", ""), "mappings": mappings}
+
+
 def _dedupe_completion_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
@@ -1163,6 +1266,11 @@ class _IdleHandler(BaseHTTPRequestHandler):
             payload = self._read_json()
             self._handle_save(payload)
             return
+        if parsed.path == "/api/file-action":
+            payload = self._read_json()
+            result = file_action(self.idle_server.cwd, payload)
+            self._send_json(result, status=200 if result.get("ok") else 400)
+            return
         if parsed.path == "/api/snippets":
             payload = self._read_json()
             try:
@@ -1365,6 +1473,16 @@ def _html() -> str:
   --file-icon-md: #8a4b00;
   --file-icon-json: #7b5aa6;
   --file-icon-config: #607d8b;
+  --sidebar-width: 286px;
+  --editor-width: 50%;
+  --editor-font-size: 14px;
+  --source-line-bg: rgba(0, 106, 106, .12);
+  --source-line-border: rgba(0, 106, 106, .45);
+  --syntax-keyword: #005f73;
+  --syntax-string: #8a4b00;
+  --syntax-comment: #6b7b85;
+  --syntax-number: #7b5aa6;
+  --syntax-builtin: #00796b;
   font-family: Inter, Roboto, "Segoe UI", system-ui, sans-serif;
 }}
 body[data-theme="dark"] {{
@@ -1405,6 +1523,13 @@ body[data-theme="dark"] {{
   --file-icon-md: #e1a95f;
   --file-icon-json: #b79ad8;
   --file-icon-config: #9fb0b8;
+  --source-line-bg: rgba(77, 182, 172, .14);
+  --source-line-border: rgba(77, 182, 172, .5);
+  --syntax-keyword: #75d3cb;
+  --syntax-string: #e1a95f;
+  --syntax-comment: #81919a;
+  --syntax-number: #b79ad8;
+  --syntax-builtin: #86d39d;
 }}
 * {{ box-sizing: border-box; }}
 body {{
@@ -1482,7 +1607,7 @@ button, input, textarea {{ font: inherit; }}
 }}
 .workspace {{
   display: grid;
-  grid-template-columns: clamp(248px, 22vw, 320px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }}
@@ -1502,7 +1627,7 @@ button, input, textarea {{ font: inherit; }}
   border-bottom: 1px solid var(--line);
 }}
 .projectPanel {{
-  grid-template-rows: 40px auto auto minmax(0, 1fr);
+  grid-template-rows: 40px auto auto auto minmax(0, 1fr);
 }}
 .sideHead {{
   display: flex;
@@ -1529,6 +1654,19 @@ button, input, textarea {{ font: inherit; }}
 .btn:disabled, .miniBtn:disabled, .iconBtn:disabled {{
   opacity: .48;
   cursor: not-allowed;
+}}
+.fileToolbar {{
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+}}
+.fileToolbar .miniBtn {{
+  min-width: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }}
 .projectRoot {{
   padding: 8px 10px;
@@ -1611,6 +1749,9 @@ button, input, textarea {{ font: inherit; }}
 }}
 .treeItem:hover, .snippetItem:hover, .snippetItem.active {{
   background: var(--hover-bg);
+}}
+.treeItem.selected {{
+  background: var(--completion-active);
 }}
 .treeName {{
   overflow: hidden;
@@ -1811,9 +1952,20 @@ button, input, textarea {{ font: inherit; }}
 }}
 .shell {{
   display: grid;
-  grid-template-columns: minmax(360px, 1.04fr) minmax(340px, .96fr);
+  grid-template-columns: minmax(280px, var(--editor-width)) 6px minmax(280px, 1fr);
   min-height: 0;
   overflow: hidden;
+}}
+.resizer {{
+  min-width: 6px;
+  min-height: 6px;
+  background: var(--surface);
+  cursor: col-resize;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}}
+.resizer:hover, .resizer.dragging {{
+  background: var(--hover-bg);
 }}
 .editorPane, .resultPane {{
   min-width: 0;
@@ -1823,6 +1975,7 @@ button, input, textarea {{ font: inherit; }}
   overflow: hidden;
 }}
 .editorPane {{ border-right: 1px solid var(--line); position: relative; }}
+.editorPane {{ border-right: 0; }}
 .paneHead {{
   display: flex;
   align-items: center;
@@ -1844,7 +1997,46 @@ button, input, textarea {{ font: inherit; }}
   font-size: 12px;
   white-space: nowrap;
 }}
+.sourceWrap {{
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--editor-bg);
+}}
+#sourceHighlight {{
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  padding: 18px;
+  overflow: hidden;
+  background: transparent;
+  color: var(--editor-ink);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: var(--editor-font-size);
+  line-height: 1.55;
+  tab-size: var(--editor-tab-size, 4);
+  white-space: pre;
+  pointer-events: none;
+}}
+.sourceLine {{
+  display: block;
+  min-height: 1.55em;
+  border-left: 3px solid transparent;
+  padding-left: 0;
+}}
+.sourceLine.mappedLine {{
+  background: var(--source-line-bg);
+  border-left-color: var(--source-line-border);
+}}
+.tok-keyword {{ color: var(--syntax-keyword); font-weight: 650; }}
+.tok-string {{ color: var(--syntax-string); }}
+.tok-comment {{ color: var(--syntax-comment); font-style: italic; }}
+.tok-number {{ color: var(--syntax-number); }}
+.tok-builtin {{ color: var(--syntax-builtin); font-weight: 650; }}
 #source {{
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -1853,12 +2045,17 @@ button, input, textarea {{ font: inherit; }}
   outline: 0;
   overflow: auto;
   padding: 18px;
-  background: var(--editor-bg);
-  color: var(--editor-ink);
+  background: transparent;
+  color: transparent;
+  caret-color: var(--editor-ink);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 14px;
+  font-size: var(--editor-font-size);
   line-height: 1.55;
-  tab-size: 4;
+  tab-size: var(--editor-tab-size, 4);
+}}
+#source::selection {{
+  background: rgba(0, 106, 106, .24);
+  color: transparent;
 }}
 #source.hasErrors {{ box-shadow: inset 3px 0 0 var(--error); }}
 .completionBox {{
@@ -1956,6 +2153,20 @@ pre {{
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
   line-height: 1.55;
+}}
+.pyLine {{
+  display: block;
+  min-height: 1.55em;
+  border-left: 3px solid transparent;
+  padding-left: 8px;
+  cursor: default;
+}}
+.pyLine[data-c4-line] {{
+  cursor: pointer;
+}}
+.pyLine.mappedLine {{
+  background: var(--source-line-bg);
+  border-left-color: var(--source-line-border);
 }}
 #output {{
   background: var(--terminal-bg);
@@ -2211,6 +2422,42 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
   color: var(--muted);
   font-size: 12px;
 }}
+.settingsDialog {{
+  width: min(620px, 100%);
+}}
+.settingsBody {{
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  overflow: auto;
+}}
+.settingField {{
+  display: grid;
+  gap: 5px;
+}}
+.settingField label {{
+  color: var(--muted);
+  font-size: 12px;
+}}
+.settingField input, .settingField select {{
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--editor-bg);
+  color: var(--ink);
+  padding: 0 9px;
+}}
+.settingCheck {{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  color: var(--ink);
+  font-size: 13px;
+}}
 @media (max-width: 860px) {{
   body {{ overflow: auto; }}
   .app {{ min-height: 100vh; height: auto; }}
@@ -2223,6 +2470,7 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
   .pathbar {{ grid-template-columns: 1fr; }}
   .actions {{ flex-wrap: wrap; }}
   .workspace {{ grid-template-columns: 1fr; grid-template-rows: minmax(320px, 40vh) minmax(620px, 1fr); }}
+  .workspace > .resizer, .shell > .resizer {{ display: none; }}
   .sidebar {{ grid-template-rows: minmax(130px, 1fr) minmax(170px, 1fr); border-right: 0; border-bottom: 1px solid var(--line); }}
   .shell {{ grid-template-columns: 1fr; grid-template-rows: 50vh 50vh; }}
   .editorPane {{ border-right: 0; border-bottom: 1px solid var(--line); }}
@@ -2230,6 +2478,7 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
   .modalDialog {{ max-height: calc(100vh - 24px); }}
   .modalBody {{ grid-template-columns: 1fr; }}
   .modalCode {{ grid-template-rows: minmax(260px, 1fr); }}
+  .settingsBody {{ grid-template-columns: 1fr; }}
 }}
 @media (max-height: 740px) and (min-width: 861px) {{
   .bar {{ min-height: 56px; }}
@@ -2258,6 +2507,7 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
       <button class="btn primary" id="runBtn">Run</button>
       <button class="btn" id="newBtn">New</button>
       <button class="btn" id="commandBtn">Commands</button>
+      <button class="btn" id="settingsBtn">Settings</button>
       <button class="btn" id="themeBtn">Theme</button>
     </div>
   </header>
@@ -2269,6 +2519,13 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
           <button class="miniBtn" id="refreshTreeBtn">Refresh</button>
         </div>
         <div id="projectRoot" class="projectRoot"></div>
+        <div class="fileToolbar">
+          <button class="miniBtn" id="newFileBtn" title="New file">File</button>
+          <button class="miniBtn" id="newDirBtn" title="New folder">Dir</button>
+          <button class="miniBtn" id="renameFileBtn" title="Rename selected">Rename</button>
+          <button class="miniBtn" id="duplicateFileBtn" title="Duplicate selected">Copy</button>
+          <button class="miniBtn" id="deleteFileBtn" title="Delete selected">Del</button>
+        </div>
         <div class="projectSearch">
           <input id="projectSearchInput" autocomplete="off" placeholder="Search project">
           <div id="projectSearchResults" class="searchResults"></div>
@@ -2297,6 +2554,7 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
         </div>
       </section>
     </aside>
+    <div class="resizer" id="sidebarResizer" aria-hidden="true"></div>
     <section class="shell">
       <section class="editorPane">
         <div class="paneHead">
@@ -2309,10 +2567,14 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
             <span id="cursorPos">1:1</span>
           </div>
         </div>
-        <textarea id="source" spellcheck="false"></textarea>
+        <div class="sourceWrap">
+          <pre id="sourceHighlight" aria-hidden="true"></pre>
+          <textarea id="source" spellcheck="false"></textarea>
+        </div>
         <div id="completionBox" class="completionBox"></div>
         <div id="signatureBox" class="signatureBox"></div>
       </section>
+      <div class="resizer" id="editorResizer" aria-hidden="true"></div>
       <section class="resultPane">
         <nav class="tabs" aria-label="result tabs">
           <button class="tab active" data-tab="outputView">Output</button>
@@ -2340,6 +2602,51 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
       </section>
     </section>
   </main>
+</div>
+<div class="modal" id="settingsModal" hidden>
+  <div class="modalBackdrop" id="settingsModalBackdrop"></div>
+  <section class="modalDialog settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <header class="modalHead">
+      <div>
+        <h2 id="settingsTitle">Settings</h2>
+        <span>Make Studio fit the way you work</span>
+      </div>
+      <button class="iconBtn" id="closeSettingsBtn" title="Close" aria-label="Close settings">x</button>
+    </header>
+    <div class="settingsBody">
+      <div class="settingField">
+        <label for="settingTheme">Theme</label>
+        <select id="settingTheme">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+      <div class="settingField">
+        <label for="settingFontSize">Editor font size</label>
+        <input id="settingFontSize" type="number" min="11" max="22" step="1">
+      </div>
+      <div class="settingField">
+        <label for="settingTabSize">Tab size</label>
+        <input id="settingTabSize" type="number" min="2" max="8" step="1">
+      </div>
+      <div class="settingField">
+        <label for="settingTreeRefresh">Tree refresh seconds</label>
+        <input id="settingTreeRefresh" type="number" min="2" max="60" step="1">
+      </div>
+      <div class="settingField">
+        <label for="settingRunTimeout">Run timeout seconds</label>
+        <input id="settingRunTimeout" type="number" min="1" max="300" step="1">
+      </div>
+      <div class="settingField">
+        <label>Autosave</label>
+        <label class="settingCheck"><input id="settingAutoSave" type="checkbox"> Save after edits</label>
+      </div>
+    </div>
+    <footer class="modalActions">
+      <button class="btn" id="resetSettingsBtn">Reset</button>
+      <button class="btn primary" id="saveSettingsBtn">Save</button>
+    </footer>
+  </section>
 </div>
 <div class="modal" id="snippetModal" hidden>
   <div class="modalBackdrop" id="snippetModalBackdrop"></div>
@@ -2386,6 +2693,7 @@ svg.graph {{ display: block; width: 100%; height: 100%; min-height: 420px; }}
 </div>
 <script>
 const source = document.getElementById("source");
+const sourceHighlight = document.getElementById("sourceHighlight");
 const pathInput = document.getElementById("path");
 const output = document.getElementById("output");
 const python = document.getElementById("python");
@@ -2410,6 +2718,13 @@ const modalSnippetCode = document.getElementById("modalSnippetCode");
 const commandPalette = document.getElementById("commandPalette");
 const commandInput = document.getElementById("commandInput");
 const commandList = document.getElementById("commandList");
+const settingsModal = document.getElementById("settingsModal");
+const settingTheme = document.getElementById("settingTheme");
+const settingFontSize = document.getElementById("settingFontSize");
+const settingTabSize = document.getElementById("settingTabSize");
+const settingTreeRefresh = document.getElementById("settingTreeRefresh");
+const settingRunTimeout = document.getElementById("settingRunTimeout");
+const settingAutoSave = document.getElementById("settingAutoSave");
 const terminalOutput = document.getElementById("terminalOutput");
 const terminalInput = document.getElementById("terminalInput");
 const completionBox = document.getElementById("completionBox");
@@ -2430,8 +2745,22 @@ let selectedSnippetId = null;
 let lastTreeSignature = "";
 let treeRefreshTimer = null;
 let openTreePaths = new Set(["."]);
+let selectedTreePath = ".";
+let treeNodeKinds = new Map();
 let projectSearchTimer = null;
 let commandState = {{items: [], selected: 0}};
+let lastSourceMap = {{mappings: []}};
+let lastPythonCode = "";
+let activeC4Line = null;
+let activePythonLines = new Set();
+let autoSaveTimer = null;
+let studioSettings = {{
+  fontSize: 14,
+  tabSize: 4,
+  treeRefresh: 5,
+  runTimeout: 10,
+  autoSave: false
+}};
 
 async function api(path, payload) {{
   const response = await fetch(path, {{
@@ -2464,6 +2793,146 @@ function toggleTheme() {{
   applyTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
 }}
 
+function loadStudioSettings() {{
+  try {{
+    const saved = JSON.parse(localStorage.getItem("cobra4-studio-settings") || "{{}}");
+    studioSettings = {{
+      ...studioSettings,
+      ...saved,
+      fontSize: Number(saved.fontSize || studioSettings.fontSize),
+      tabSize: Number(saved.tabSize || studioSettings.tabSize),
+      treeRefresh: Number(saved.treeRefresh || studioSettings.treeRefresh),
+      runTimeout: Number(saved.runTimeout || studioSettings.runTimeout),
+      autoSave: !!saved.autoSave
+    }};
+  }} catch {{
+    studioSettings = {{fontSize: 14, tabSize: 4, treeRefresh: 5, runTimeout: 10, autoSave: false}};
+  }}
+  applyStudioSettings();
+}}
+
+function applyStudioSettings() {{
+  document.documentElement.style.setProperty("--editor-font-size", `${{studioSettings.fontSize}}px`);
+  document.documentElement.style.setProperty("--editor-tab-size", String(studioSettings.tabSize));
+  source.style.tabSize = String(studioSettings.tabSize);
+  sourceHighlight.style.tabSize = String(studioSettings.tabSize);
+  startTreeAutoRefresh();
+  renderSourceHighlight();
+}}
+
+function persistStudioSettings() {{
+  localStorage.setItem("cobra4-studio-settings", JSON.stringify(studioSettings));
+}}
+
+function openSettingsModal() {{
+  settingTheme.value = document.body.dataset.theme === "dark" ? "dark" : "light";
+  settingFontSize.value = studioSettings.fontSize;
+  settingTabSize.value = studioSettings.tabSize;
+  settingTreeRefresh.value = studioSettings.treeRefresh;
+  settingRunTimeout.value = studioSettings.runTimeout;
+  settingAutoSave.checked = !!studioSettings.autoSave;
+  settingsModal.hidden = false;
+  settingFontSize.focus();
+}}
+
+function closeSettingsModal() {{
+  settingsModal.hidden = true;
+  source.focus();
+}}
+
+function saveSettingsFromForm() {{
+  studioSettings = {{
+    fontSize: clampNumber(settingFontSize.value, 11, 22, 14),
+    tabSize: clampNumber(settingTabSize.value, 2, 8, 4),
+    treeRefresh: clampNumber(settingTreeRefresh.value, 2, 60, 5),
+    runTimeout: clampNumber(settingRunTimeout.value, 1, 300, 10),
+    autoSave: settingAutoSave.checked
+  }};
+  applyTheme(settingTheme.value);
+  applyStudioSettings();
+  persistStudioSettings();
+  closeSettingsModal();
+}}
+
+function resetSettings() {{
+  studioSettings = {{fontSize: 14, tabSize: 4, treeRefresh: 5, runTimeout: 10, autoSave: false}};
+  applyTheme("light");
+  applyStudioSettings();
+  persistStudioSettings();
+  openSettingsModal();
+}}
+
+function clampNumber(value, min, max, fallback) {{
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}}
+
+function loadLayoutState() {{
+  try {{
+    const saved = JSON.parse(localStorage.getItem("cobra4-studio-layout") || "{{}}");
+    if (saved.sidebarWidth) document.documentElement.style.setProperty("--sidebar-width", `${{saved.sidebarWidth}}px`);
+    if (saved.editorWidth) document.documentElement.style.setProperty("--editor-width", `${{saved.editorWidth}}px`);
+  }} catch {{}}
+}}
+
+function saveLayoutState(values) {{
+  let current = {{}};
+  try {{
+    current = JSON.parse(localStorage.getItem("cobra4-studio-layout") || "{{}}");
+  }} catch {{}}
+  localStorage.setItem("cobra4-studio-layout", JSON.stringify({{...current, ...values}}));
+}}
+
+function initResizers() {{
+  initSidebarResizer();
+  initEditorResizer();
+}}
+
+function initSidebarResizer() {{
+  const handle = document.getElementById("sidebarResizer");
+  handle.addEventListener("mousedown", event => {{
+    event.preventDefault();
+    handle.classList.add("dragging");
+    const startX = event.clientX;
+    const startWidth = document.querySelector(".sidebar").getBoundingClientRect().width;
+    const onMove = moveEvent => {{
+      const width = Math.round(clampNumber(startWidth + moveEvent.clientX - startX, 220, 560, startWidth));
+      document.documentElement.style.setProperty("--sidebar-width", `${{width}}px`);
+      saveLayoutState({{sidebarWidth: width}});
+    }};
+    const onUp = () => {{
+      handle.classList.remove("dragging");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }};
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }});
+}}
+
+function initEditorResizer() {{
+  const handle = document.getElementById("editorResizer");
+  const shell = document.querySelector(".shell");
+  handle.addEventListener("mousedown", event => {{
+    event.preventDefault();
+    handle.classList.add("dragging");
+    const onMove = moveEvent => {{
+      const rect = shell.getBoundingClientRect();
+      const width = Math.round(clampNumber(moveEvent.clientX - rect.left, 260, rect.width - 260, rect.width / 2));
+      document.documentElement.style.setProperty("--editor-width", `${{width}}px`);
+      saveLayoutState({{editorWidth: width}});
+    }};
+    const onUp = () => {{
+      handle.classList.remove("dragging");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }};
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }});
+}}
+
 function loadTreeState() {{
   try {{
     const saved = JSON.parse(localStorage.getItem("cobra4-idle-open-tree") || "[]");
@@ -2489,18 +2958,21 @@ async function loadProjectTree(force=false) {{
 
 function renderFileTree(root) {{
   fileTree.innerHTML = "";
+  treeNodeKinds = new Map();
   const addNode = (node, depth=0) => {{
     if (!node) return;
     const isDir = node.kind === "dir";
     const nodePath = node.path || ".";
     const isOpen = !isDir || openTreePaths.has(nodePath);
+    treeNodeKinds.set(nodePath, node.kind || "file");
     const row = document.createElement("div");
-    row.className = `treeItem ${{isDir ? "dirItem" : ""}} ${{isOpen ? "open" : ""}}`;
+    row.className = `treeItem ${{isDir ? "dirItem" : ""}} ${{isOpen ? "open" : ""}} ${{nodePath === selectedTreePath ? "selected" : ""}}`;
     row.style.paddingLeft = `${{6 + depth * 12}}px`;
     row.dataset.path = nodePath;
     row.innerHTML = `<button class="treeToggle ${{isDir ? "" : "empty"}}" aria-label="${{isOpen ? "Collapse" : "Expand"}}" aria-expanded="${{isOpen}}"></button><span class="fileIcon ${{fileIconClass(node)}}" aria-hidden="true"></span><span class="treeName">${{escapeHtml(node.name || "")}}</span>`;
     if (isDir) {{
       row.addEventListener("click", () => {{
+        selectedTreePath = nodePath;
         if (openTreePaths.has(nodePath)) {{
           if (nodePath !== ".") openTreePaths.delete(nodePath);
         }} else {{
@@ -2511,8 +2983,10 @@ function renderFileTree(root) {{
       }});
     }} else if (node.kind === "file") {{
       row.addEventListener("click", () => {{
+        selectedTreePath = nodePath;
         pathInput.value = node.path;
         openPath();
+        renderFileTree(root);
       }});
     }}
     fileTree.appendChild(row);
@@ -2537,7 +3011,8 @@ function fileIconClass(node) {{
 
 function startTreeAutoRefresh() {{
   clearInterval(treeRefreshTimer);
-  treeRefreshTimer = setInterval(() => loadProjectTree(false), 5000);
+  const delay = Math.max(2, Number(studioSettings.treeRefresh || 5)) * 1000;
+  treeRefreshTimer = setInterval(() => loadProjectTree(false), delay);
 }}
 
 function scheduleProjectSearch() {{
@@ -2577,6 +3052,79 @@ function renderProjectSearchResults(result) {{
       if (opened && opened.ok) goToLine(Number(item.line || 1), 1);
     }});
     projectSearchResults.appendChild(row);
+  }}
+}}
+
+function selectedTreeBasePath() {{
+  const path = selectedTreePath || ".";
+  const kind = treeNodeKinds.get(path);
+  if (kind === "file") return dirname(path);
+  return path;
+}}
+
+function dirname(path) {{
+  const value = String(path || ".");
+  const idx = value.lastIndexOf("/");
+  if (idx < 0) return ".";
+  return value.slice(0, idx) || ".";
+}}
+
+function basename(path) {{
+  const value = String(path || "");
+  const idx = value.lastIndexOf("/");
+  return idx < 0 ? value : value.slice(idx + 1);
+}}
+
+function joinPath(base, name) {{
+  if (!base || base === ".") return name;
+  return `${{base.replace(/\\/$/, "")}}/${{name}}`;
+}}
+
+function defaultDuplicatePath(path) {{
+  const name = basename(path);
+  const base = dirname(path);
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const suffix = dot > 0 ? name.slice(dot) : "";
+  return joinPath(base, `${{stem}} copy${{suffix}}`);
+}}
+
+async function runFileAction(action) {{
+  const current = selectedTreePath || ".";
+  let payload = {{action, path: current}};
+  if (action === "new_file") {{
+    const path = prompt("New file path", joinPath(selectedTreeBasePath(), "new.c4"));
+    if (!path) return;
+    payload = {{action, path}};
+  }} else if (action === "new_dir") {{
+    const path = prompt("New folder path", joinPath(selectedTreeBasePath(), "folder"));
+    if (!path) return;
+    payload = {{action, path}};
+  }} else if (action === "rename") {{
+    if (current === ".") return;
+    const path = prompt("Rename to", current);
+    if (!path || path === current) return;
+    payload = {{action, path: current, newPath: path}};
+  }} else if (action === "duplicate") {{
+    if (current === ".") return;
+    const path = prompt("Duplicate to", defaultDuplicatePath(current));
+    if (!path) return;
+    payload = {{action, path: current, newPath: path}};
+  }} else if (action === "delete") {{
+    if (current === ".") return;
+    if (!confirm(`Delete ${{current}}?`)) return;
+  }}
+  const result = await api("/api/file-action", payload);
+  if (!result.ok) {{
+    output.textContent = result.error || "file action failed";
+    setTab("outputView");
+    return;
+  }}
+  if (result.path) selectedTreePath = result.path;
+  await loadProjectTree(true);
+  if (["new_file", "rename", "duplicate"].includes(action) && result.path && treeNodeKinds.get(result.path) !== "dir") {{
+    pathInput.value = result.path;
+    openPath();
   }}
 }}
 
@@ -2746,13 +3294,18 @@ function insertSnippetAtCursor(code=null) {{
   const text = codeText.replace(/\\s+$/g, "") + "\\n";
   source.setRangeText(text, lineStart, lineStart, "end");
   source.focus();
+  renderSourceHighlight();
   scheduleCompile();
+  scheduleAutoSave();
   updateCursorStatus();
 }}
 
 function newScratch() {{
   pathInput.value = "idle_scratch.c4";
   source.value = "";
+  activeC4Line = null;
+  activePythonLines = new Set();
+  renderSourceHighlight();
   hideCompletions();
   signatureBox.style.display = "none";
   scheduleCompile();
@@ -2772,6 +3325,7 @@ function commandItems() {{
     {{title: "Search project", hint: "Focus sidebar search", run: () => projectSearchInput.focus()}},
     {{title: "New snippet", hint: "Create a custom bolt", run: () => {{ newSnippet(); openSnippetModal(null); }}}},
     {{title: "Inspect selected snippet", hint: "Open snippet modal", run: () => openSnippetModal(selectedSnippetId)}},
+    {{title: "Open settings", hint: "Font, autosave, run timeout", run: openSettingsModal}},
     {{title: "Toggle theme", hint: "Light or dark", run: toggleTheme}}
   ];
 }}
@@ -2861,7 +3415,7 @@ async function compileNow() {{
 }}
 
 function updateCompile(result) {{
-  python.textContent = result.python || "";
+  renderPython(result.python || "", result.sourceMap || {{mappings: []}});
   lastGraph = result.graph || {{nodes: [], edges: []}};
   lastSymbols = result.symbols || [];
   const metrics = result.metrics || {{}};
@@ -2921,6 +3475,105 @@ function renderSymbols(items) {{
     (item.children || []).forEach(childItem => addSymbol(childItem, true));
   }};
   items.forEach(item => addSymbol(item));
+}}
+
+function renderSourceHighlight() {{
+  const lines = source.value.split("\\n");
+  sourceHighlight.innerHTML = lines.map((line, index) => {{
+    const lineNo = index + 1;
+    const cls = lineNo === activeC4Line ? "sourceLine mappedLine" : "sourceLine";
+    return `<span class="${{cls}}" data-line="${{lineNo}}">${{highlightCobra4(line) || " "}}</span>`;
+  }}).join("");
+  syncSourceHighlightScroll();
+}}
+
+function highlightCobra4(line) {{
+  const commentIndex = findCommentIndex(line);
+  const code = commentIndex >= 0 ? line.slice(0, commentIndex) : line;
+  const comment = commentIndex >= 0 ? line.slice(commentIndex) : "";
+  const escaped = highlightCobra4Code(code);
+  return escaped + (comment ? `<span class="tok-comment">${{escapeHtml(comment)}}</span>` : "");
+}}
+
+function highlightCobra4Code(code) {{
+  const keywordPattern = /^(data|class|fn|return|if|elif|else|for|in|while|match|case|try|catch|finally|raise|every|seconds?|on|event|from|serve|deploy|to|resource|use|as|async|await|parallel|where|break|continue|pass)$/;
+  const builtinPattern = /^(read|save|log|Ok|Err|Result|len|int|str|float|bool|list|dict)$/;
+  const tokenPattern = /"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|\\b\\d+(?:\\.\\d+)?\\b|\\b[A-Za-z_][A-Za-z0-9_]*\\b/g;
+  let out = "";
+  let last = 0;
+  for (const match of code.matchAll(tokenPattern)) {{
+    const token = match[0];
+    out += escapeHtml(code.slice(last, match.index));
+    if (token.startsWith('"') || token.startsWith("'")) {{
+      out += `<span class="tok-string">${{escapeHtml(token)}}</span>`;
+    }} else if (/^\\d/.test(token)) {{
+      out += `<span class="tok-number">${{escapeHtml(token)}}</span>`;
+    }} else if (keywordPattern.test(token)) {{
+      out += `<span class="tok-keyword">${{escapeHtml(token)}}</span>`;
+    }} else if (builtinPattern.test(token)) {{
+      out += `<span class="tok-builtin">${{escapeHtml(token)}}</span>`;
+    }} else {{
+      out += escapeHtml(token);
+    }}
+    last = match.index + token.length;
+  }}
+  return out + escapeHtml(code.slice(last));
+}}
+
+function findCommentIndex(line) {{
+  let quote = null;
+  for (let i = 0; i < line.length; i++) {{
+    const ch = line[i];
+    if (quote) {{
+      if (ch === "\\\\") i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }}
+    if (ch === '"' || ch === "'") {{
+      quote = ch;
+      continue;
+    }}
+    if (ch === "#") return i;
+    if (ch === "/" && line[i + 1] === "/") return i;
+  }}
+  return -1;
+}}
+
+function syncSourceHighlightScroll() {{
+  sourceHighlight.scrollTop = source.scrollTop;
+  sourceHighlight.scrollLeft = source.scrollLeft;
+}}
+
+function renderPython(code, sourceMap) {{
+  lastPythonCode = String(code || "");
+  lastSourceMap = sourceMap || {{mappings: []}};
+  const byPython = new Map((lastSourceMap.mappings || []).map(item => [item.python, item.cobra4]));
+  const lines = lastPythonCode.split("\\n");
+  python.innerHTML = lines.map((line, index) => {{
+    const pyLine = index + 1;
+    const c4Line = byPython.get(pyLine);
+    const mapped = activePythonLines.has(pyLine) ? " mappedLine" : "";
+    const attr = c4Line ? ` data-c4-line="${{c4Line}}" data-py-line="${{pyLine}}" title="Cobra4 line ${{c4Line}}"` : ` data-py-line="${{pyLine}}"`;
+    return `<span class="pyLine${{mapped}}"${{attr}}>${{escapeHtml(line) || " "}}</span>`;
+  }}).join("");
+}}
+
+function highlightMappedLinesFromC4(line) {{
+  activeC4Line = line || null;
+  activePythonLines = new Set(
+    (lastSourceMap.mappings || [])
+      .filter(item => item.cobra4 === activeC4Line)
+      .map(item => item.python)
+  );
+  renderSourceHighlight();
+  renderPython(lastPythonCode, lastSourceMap);
+}}
+
+function highlightMappedLinesFromPython(pyLine) {{
+  const item = (lastSourceMap.mappings || []).find(mapping => mapping.python === pyLine);
+  if (!item) return;
+  highlightMappedLinesFromC4(item.cobra4);
+  goToLine(item.cobra4, 1);
 }}
 
 function escapeHtml(value) {{
@@ -3055,8 +3708,10 @@ function applyCompletion() {{
   source.setRangeText(item.insertText || item.label, start, end, "end");
   hideCompletions();
   source.focus();
+  renderSourceHighlight();
   updateCursorStatus();
   scheduleCompile();
+  scheduleAutoSave();
 }}
 
 function moveCompletion(delta) {{
@@ -3140,7 +3795,7 @@ async function runNow() {{
   const result = await api("/api/run", {{
     source: source.value,
     path: pathInput.value,
-    timeout: 10
+    timeout: studioSettings.runTimeout || 10
   }});
   updateCompile(result);
   const chunks = [];
@@ -3179,6 +3834,7 @@ async function formatNow() {{
     return;
   }}
   source.value = result.source || source.value;
+  renderSourceHighlight();
   hideCompletions();
   signatureBox.style.display = "none";
   await compileNow();
@@ -3195,24 +3851,38 @@ async function openPath() {{
   }}
   pathInput.value = result.path;
   source.value = result.source;
+  activeC4Line = null;
+  activePythonLines = new Set();
+  renderSourceHighlight();
   scheduleCompile();
   return result;
 }}
 
-async function savePath() {{
+function scheduleAutoSave() {{
+  if (!studioSettings.autoSave) return;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => savePath({{silent: true}}), 900);
+}}
+
+async function savePath(options={{}}) {{
   const result = await api("/api/save", {{
     path: pathInput.value,
     source: source.value
   }});
-  output.textContent = result.ok ? `saved ${{result.path}}` : (result.error || "save failed");
+  if (!options.silent) {{
+    output.textContent = result.ok ? `saved ${{result.path}}` : (result.error || "save failed");
+  }}
   if (result.path) pathInput.value = result.path;
-  setTab("outputView");
-  loadProjectTree();
+  if (!options.silent) setTab("outputView");
+  loadProjectTree(true);
+  return result;
 }}
 
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => setTab(btn.dataset.tab)));
 source.addEventListener("input", event => {{
   scheduleCompile();
+  renderSourceHighlight();
+  scheduleAutoSave();
   updateCursorStatus();
   const text = event.data || "";
   if (text === "(" || text === ",") requestSignature();
@@ -3221,6 +3891,8 @@ source.addEventListener("input", event => {{
 }});
 source.addEventListener("click", () => {{
   updateCursorStatus();
+  const pos = cursorPosition();
+  highlightMappedLinesFromC4(pos.line + 1);
   hideCompletions();
   requestHover();
 }});
@@ -3254,7 +3926,9 @@ source.addEventListener("keydown", event => {{
   if (event.key === "Tab") {{
     event.preventDefault();
     source.setRangeText("    ", source.selectionStart, source.selectionEnd, "end");
+    renderSourceHighlight();
     scheduleCompile();
+    scheduleAutoSave();
     updateCursorStatus();
     return;
   }}
@@ -3275,6 +3949,12 @@ source.addEventListener("keydown", event => {{
   }}
 }});
 source.addEventListener("blur", hideSignatureSoon);
+source.addEventListener("scroll", syncSourceHighlightScroll);
+python.addEventListener("click", event => {{
+  const row = event.target.closest && event.target.closest(".pyLine[data-c4-line]");
+  if (!row) return;
+  highlightMappedLinesFromPython(Number(row.dataset.pyLine || 0));
+}});
 document.getElementById("runBtn").addEventListener("click", runNow);
 document.getElementById("checkBtn").addEventListener("click", checkNow);
 document.getElementById("formatBtn").addEventListener("click", formatNow);
@@ -3283,6 +3963,12 @@ document.getElementById("saveBtn").addEventListener("click", savePath);
 document.getElementById("refreshTreeBtn").addEventListener("click", () => loadProjectTree(true));
 document.getElementById("themeBtn").addEventListener("click", toggleTheme);
 document.getElementById("commandBtn").addEventListener("click", openCommandPalette);
+document.getElementById("settingsBtn").addEventListener("click", openSettingsModal);
+document.getElementById("newFileBtn").addEventListener("click", () => runFileAction("new_file"));
+document.getElementById("newDirBtn").addEventListener("click", () => runFileAction("new_dir"));
+document.getElementById("renameFileBtn").addEventListener("click", () => runFileAction("rename"));
+document.getElementById("duplicateFileBtn").addEventListener("click", () => runFileAction("duplicate"));
+document.getElementById("deleteFileBtn").addEventListener("click", () => runFileAction("delete"));
 projectSearchInput.addEventListener("input", scheduleProjectSearch);
 projectSearchInput.addEventListener("keydown", event => {{
   if (event.key === "Escape") {{
@@ -3303,6 +3989,10 @@ document.getElementById("modalSaveSnippetBtn").addEventListener("click", () => s
 document.getElementById("modalDeleteSnippetBtn").addEventListener("click", deleteSnippet);
 document.getElementById("closeCommandPaletteBtn").addEventListener("click", closeCommandPalette);
 document.getElementById("commandPaletteBackdrop").addEventListener("click", closeCommandPalette);
+document.getElementById("closeSettingsBtn").addEventListener("click", closeSettingsModal);
+document.getElementById("settingsModalBackdrop").addEventListener("click", closeSettingsModal);
+document.getElementById("saveSettingsBtn").addEventListener("click", saveSettingsFromForm);
+document.getElementById("resetSettingsBtn").addEventListener("click", resetSettings);
 commandInput.addEventListener("input", () => {{
   commandState.selected = 0;
   renderCommandPalette();
@@ -3336,6 +4026,10 @@ document.addEventListener("keydown", event => {{
     closeCommandPalette();
     return;
   }}
+  if (!settingsModal.hidden && event.key === "Escape") {{
+    closeSettingsModal();
+    return;
+  }}
   if (!snippetModal.hidden && event.key === "Escape") closeSnippetModal();
 }});
 document.getElementById("newBtn").addEventListener("click", newScratch);
@@ -3343,10 +4037,14 @@ document.getElementById("newBtn").addEventListener("click", newScratch);
 fetch("/api/sample").then(r => r.json()).then(sample => {{
   source.value = sample.source;
   pathInput.value = sample.path;
+  renderSourceHighlight();
   updateCursorStatus();
   compileNow();
 }});
 initTheme();
+loadStudioSettings();
+loadLayoutState();
+initResizers();
 loadTreeState();
 loadProjectTree(true);
 startTreeAutoRefresh();

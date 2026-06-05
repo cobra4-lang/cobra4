@@ -8,6 +8,7 @@ from cobra4.idle import (
     _html,
     build_graph,
     complete_source,
+    file_action,
     format_source,
     hover_source,
     inspect_source,
@@ -39,6 +40,7 @@ serve handler on :8080
     assert "_c4_serve(handler, 8080)" in result.python
     assert result.metrics["cobra4Loc"] > 0
     assert result.metrics["pythonLoc"] >= result.metrics["cobra4Loc"]
+    assert any(item["cobra4"] == 1 for item in result.source_map["mappings"])
     kinds = {node["kind"] for node in result.graph["nodes"]}
     assert {"function", "io-read", "io-save", "http"} <= kinds
     assert result.symbols[0]["name"] == "handler"
@@ -136,6 +138,35 @@ def test_idle_project_search_finds_text_and_skips_heavy_dirs(tmp_path: Path) -> 
     ]
 
 
+def test_idle_file_actions_create_rename_duplicate_and_delete(tmp_path: Path) -> None:
+    created = file_action(str(tmp_path), {"action": "new_file", "path": "src/main.c4"})
+    renamed = file_action(
+        str(tmp_path),
+        {"action": "rename", "path": "src/main.c4", "newPath": "src/app.c4"},
+    )
+    duplicated = file_action(
+        str(tmp_path),
+        {"action": "duplicate", "path": "src/app.c4", "newPath": "src/app_copy.c4"},
+    )
+    deleted = file_action(
+        str(tmp_path), {"action": "delete", "path": "src/app_copy.c4"}
+    )
+
+    assert created == {"ok": True, "path": "src/main.c4"}
+    assert renamed == {"ok": True, "path": "src/app.c4"}
+    assert duplicated == {"ok": True, "path": "src/app_copy.c4"}
+    assert deleted == {"ok": True, "path": "src/app_copy.c4"}
+    assert (tmp_path / "src" / "app.c4").exists()
+    assert not (tmp_path / "src" / "app_copy.c4").exists()
+
+
+def test_idle_file_actions_refuse_project_root_delete(tmp_path: Path) -> None:
+    result = file_action(str(tmp_path), {"action": "delete", "path": "."})
+
+    assert not result["ok"]
+    assert "project root" in result["error"]
+
+
 def test_idle_custom_snippets_roundtrip(tmp_path: Path) -> None:
     saved = save_custom_snippets(
         str(tmp_path),
@@ -174,6 +205,11 @@ def test_idle_ui_includes_theme_icons_and_tree_auto_refresh() -> None:
     assert "openTreePaths" in html
     assert 'id="projectSearchInput"' in html
     assert 'id="commandPalette"' in html
+    assert 'id="sourceHighlight"' in html
+    assert 'id="settingsModal"' in html
+    assert 'id="sidebarResizer"' in html
+    assert 'id="newFileBtn"' in html
+    assert "highlightMappedLinesFromPython" in html
     assert 'id="snippetModal"' in html
     assert 'title="Inspect"' in html
     assert "modalInsertSnippetBtn" in html
