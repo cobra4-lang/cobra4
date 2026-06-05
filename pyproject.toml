@@ -1,15 +1,14 @@
 [build-system]
-requires = ["setuptools>=77", "wheel"]
+requires = ["setuptools>=68,<77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "cobra4"
-version = "0.6.0"
+version = "0.6.1"
 description = "A high-level, cloud-native language transpiled to Python."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
-license-files = ["LICENSE"]
+license = { text = "MIT" }
 authors = [{ name = "cobra4 authors" }]
 keywords = [
     "language", "transpiler", "compiler", "dsl",
@@ -19,6 +18,7 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -63,6 +63,9 @@ dev = ["pytest>=8.0", "black>=24.0"]
 [project.scripts]
 cobra4 = "cobra4.cli:main"
 c4 = "cobra4.cli:main"
+
+[tool.setuptools]
+license-files = []
 
 [tool.setuptools.packages.find]
 include = ["cobra4*"]
