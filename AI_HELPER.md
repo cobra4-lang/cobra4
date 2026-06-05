@@ -1126,6 +1126,7 @@ prod = ["web1"]
 # Sviluppo
 c4 run src/main.c4                       # transpile + esegue
 c4 run src/main.c4 --watch               # re-run on file change
+c4 studio                                # IDE browser: edit/run/lint/Python generato/grafo
 c4 check src/main.c4 --strict            # tipi + linting plugin-aware
 c4 fmt src/main.c4 -w                    # format in-place, preserva plugin syntax
 c4 repl                                  # REPL multilinea con history + tab
@@ -1554,7 +1555,7 @@ batte ogni documento. Mappa:
 Esegui il test suite per validare ogni cambiamento:
 
 ```bash
-python -m pytest                           # 174 passing (+ 2 skipped)
+python -m pytest                           # 513 passing (+ 2 skipped)
 python -m pytest tests/test_review_fixes.py  # regression sui fix critici
 ```
 

@@ -16,7 +16,7 @@ often replaces a small Python program.*
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
 ```bash
-pip install cobra4              # CLI: c4 run | build | check | fmt | repl | lsp | serve
+pip install cobra4              # CLI: c4 studio | run | build | check | fmt | test | lsp
 ```
 
 VS Code extension: install from the
@@ -24,6 +24,12 @@ VS Code extension: install from the
 (Cursor, VSCodium, code-server) or from
 [`editor/vscode/cobra4`](editor/vscode/cobra4) for a local build. The
 official VS Code Marketplace listing is *coming soon*.
+
+Cobra4 Studio: run `c4 studio` from any project directory to open the
+browser-based IDE. It includes a project tree, file actions, search,
+syntax highlighting, completion, lint diagnostics, snippets, terminal,
+generated Python view with source-map highlighting, and a graph view of
+what the program asks the runtime to do.
 
 ---
 
@@ -91,6 +97,7 @@ every 5 minutes {
 ```bash
 pip install cobra4
 
+c4 studio                                # browser IDE for a project
 c4 run   examples/03_etl.c4              # transpile + execute
 c4 build examples/03_etl.c4 -o etl.py    # transpile only
 c4 fmt   examples/03_etl.c4              # canonical format
@@ -131,7 +138,7 @@ to log every resolution.
 
 ## What's shipped
 
-cobra4 is **alpha but real**: 174 tests pass, every example runs end-to-end,
+cobra4 is **alpha but real**: 513 tests pass, every example runs end-to-end,
 the runtime hardens itself against the obvious foot-guns (atomic `save`,
 `shell=False` by default for fleet, paramiko `RejectPolicy`, HTTP bound
 to localhost by default, …).
@@ -149,9 +156,11 @@ to localhost by default, …).
 | Language plugins: `sql`, `regex`, `yaml` (and a public `LanguagePlugin` API) | ✅ |
 | Stdlib written in cobra4 itself (`http`, `json`, `fs`, `data`, `time`, `strings`, `cli`, `test`) with mtime-cached import hook | ✅ |
 | LSP (`c4 lsp`): diagnostics, hover, go-to-def, references, completion, format | ✅ |
+| Cobra4 Studio (`c4 studio`): project tree, snippets, terminal, generated Python + source-map view, graph | ✅ |
 | Tooling: REPL with completion + history, formatter, `c4 doc` markdown, `c4 deps`, `c4 plugin` | ✅ |
 | VS Code extension (`editor/vscode/cobra4`) — packaged `.vsix`            | ✅ |
-| Marketplace publish + PyPI publish                                        | 🚧 |
+| PyPI package + Open VSX extension listing                                | ✅ |
+| Official VS Code Marketplace listing                                      | 🚧 |
 
 ## Operational env vars
 
@@ -182,13 +191,14 @@ cobra4/
   lowering.py        # Surface AST → core AST
   codegen.py         # Core AST → Python source
   source_map.py      # Line:col → line:col mapping
+  idle.py            # Cobra4 Studio HTTP server + browser UI
   import_hook.py     # `.c4` import + mtime-keyed bytecode cache
   runtime/           # smart, io, concurrency, fleet, secrets, deploy, http, queues, schedule, observe
   stdlib/            # http.c4, json.c4, fs.c4, data.c4, time.c4, strings.c4, cli.c4, test.c4
   plugins/           # builtin: sql, regex, yaml (+ LanguagePlugin API)
   tools/             # repl, fmt, lsp
 examples/            # 10 end-to-end programs
-tests/               # 174 passing
+tests/               # 513 passing
 editor/vscode/       # VS Code extension (TextMate + LSP client)
 ```
 

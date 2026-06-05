@@ -17,6 +17,7 @@ distributed jobs to first-class language constructs. *One line of cobra4
 often replaces a small Python program.*
 
 [:material-rocket-launch: Get started](getting-started/install.md){ .md-button .md-button--primary }
+[Cobra4 Studio](tooling/idle.md){ .md-button }
 [:material-github: GitHub](https://github.com/cobra4-lang/cobra4){ .md-button }
 
 ---
@@ -58,6 +59,16 @@ every 5 minutes {
     save(results, "s3://bucket/snapshots/{now()}.jsonl")
 }
 ```
+
+---
+
+## Cobra4 Studio
+
+Run `c4 studio` inside a Cobra4 project to open the browser IDE. Studio
+combines the project tree, file actions, project search, syntax
+highlighting, completions, lint diagnostics, snippets, a terminal,
+generated Python with source-map highlighting, and a graph of the
+program's runtime intent.
 
 ---
 

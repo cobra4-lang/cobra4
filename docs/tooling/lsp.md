@@ -2,6 +2,10 @@
 
 `c4 lsp` is a JSON-RPC over stdio language server. Capabilities:
 
+For the included browser IDE, run `c4 studio`. Use `c4 lsp` when you want
+to connect Cobra4 to an external editor such as VS Code, VSCodium,
+Cursor, Neovim, or Helix.
+
 | Feature                         | Notes                                                  |
 |---------------------------------|--------------------------------------------------------|
 | Diagnostics                     | parser + resolver + type checker, on save & change     |

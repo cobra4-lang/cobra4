@@ -16,6 +16,17 @@ c4 deps   add|list|remove|install [--venv]
 c4 plugin list|add NAME
 ```
 
+## Studio
+
+```bash
+c4 studio [--host HOST] [--port PORT] [--no-browser] [--verbose]
+```
+
+`c4 studio` starts Cobra4 Studio in the current directory. If `--port` is
+omitted, Cobra4 asks the operating system for a free random local port to
+avoid conflicts with other development servers. Use `c4 idle` only as a
+compatibility alias.
+
 ## `--watch`
 
 `c4 run FILE --watch` reruns on file change.

@@ -45,9 +45,20 @@ c4 build hello.c4 -o hello.py
 cat hello.py
 ```
 
+You can also open the same project in Cobra4 Studio:
+
+```bash
+c4 studio
+```
+
+Studio shows the generated Python beside the Cobra4 source and uses the
+compiler source map to highlight which generated lines came from each
+source line.
+
 ## Other useful commands
 
 ```bash
+c4 studio                # browser Studio: edit, run, inspect generated Python
 c4 fmt   hello.c4         # canonical re-format from AST
 c4 check hello.c4         # lint + type warnings, no execution
 c4 repl                   # multi-line REPL with completion + history

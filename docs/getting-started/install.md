@@ -13,7 +13,7 @@ This installs two console scripts on your `PATH`: `c4` (short) and
 
 ```bash
 c4 --version
-# cobra4 0.1.0
+# cobra4 0.5.0
 ```
 
 ## With pipx (isolated, recommended)
@@ -46,6 +46,19 @@ pip install "cobra4[dev]"     # pytest + black for development
 ```
 
 You can combine them: `pip install "cobra4[aws,data,ssh,sql]"`.
+
+## Open Cobra4 Studio
+
+Start Studio from the root of the project you want to work on:
+
+```bash
+c4 studio
+```
+
+Studio asks the operating system for a free local port by default and
+opens a browser IDE with a project tree, editor, generated Python view,
+graph view, snippets, terminal, completion, and lint diagnostics. `c4 idle`
+is kept as a compatibility alias.
 
 ## VS Code extension
 
