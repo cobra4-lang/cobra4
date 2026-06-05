@@ -13,7 +13,7 @@ This installs two console scripts on your `PATH`: `c4` (short) and
 
 ```bash
 c4 --version
-# cobra4 0.5.0
+# cobra4 0.6.0
 ```
 
 ## With pipx (isolated, recommended)
