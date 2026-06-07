@@ -7,15 +7,16 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build:
     name: Build distributions
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -27,7 +28,7 @@ jobs:
           python -m pip install --upgrade twine
           twine check dist/*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dist
           path: dist/*
@@ -37,23 +38,17 @@ jobs:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/cobra4
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           name: dist
           path: dist
 
       - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          if [ -z "${TWINE_PASSWORD:-}" ]; then
-            echo "PYPI_API_TOKEN not set — skipping publish"
-            exit 0
-          fi
-          python -m pip install --upgrade twine
-          # `--skip-existing` so re-tagging the same version doesn't fail
-          # (PyPI rejects re-uploads of the same filename either way; this
-          # just exits 0 cleanly).
-          twine upload --skip-existing dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true

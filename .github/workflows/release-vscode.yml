@@ -16,14 +16,16 @@ jobs:
       run:
         working-directory: editor/vscode/cobra4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: editor/vscode/cobra4/package-lock.json
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
       - name: Package
         run: npx vsce package
@@ -48,7 +50,7 @@ jobs:
           fi
           npx ovsx publish --pat "$OVSX_PAT" *.vsix
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: vsix
           path: editor/vscode/cobra4/*.vsix
