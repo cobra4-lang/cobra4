@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 import sys
 import tempfile
@@ -123,3 +124,21 @@ def test_cli_plugin_list_includes_all_builtins():
     assert p.returncode == 0
     for name in ("graphql", "llm", "prom", "regex", "sql", "yaml"):
         assert f"{name}:" in p.stdout
+
+
+def test_cli_doctor_human_output():
+    p = _run_cli("doctor")
+    assert p.returncode == 0
+    assert "cobra4 doctor" in p.stdout
+    assert "[ok] python:" in p.stdout
+    assert "[ok] compiler:" in p.stdout
+    assert "[ok] stdlib:" in p.stdout
+
+
+def test_cli_doctor_json_output():
+    p = _run_cli("doctor", "--json")
+    assert p.returncode == 0
+    payload = json.loads(p.stdout)
+    assert payload["ok"] is True
+    names = {check["name"] for check in payload["checks"]}
+    assert {"python", "cobra4", "compiler", "stdlib"}.issubset(names)

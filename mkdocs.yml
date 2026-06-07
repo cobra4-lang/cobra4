@@ -42,6 +42,7 @@ nav:
   - Getting started:
       - Installation: getting-started/install.md
       - First program: getting-started/first-program.md
+      - Development workflow: getting-started/workflow.md
   - Language:
       - Lexicon & syntax: language/lexicon.md
       - Statements: language/statements.md
@@ -75,6 +76,7 @@ nav:
       - Log analyzer: examples/log-analyzer.md
       - Webhook router: examples/webhook-router.md
   - Reference:
+      - Changelog: reference/changelog.md
       - Stdlib API: reference/stdlib.md
       - Environment variables: reference/env.md
       - AI assistants guide: reference/ai-helper.md

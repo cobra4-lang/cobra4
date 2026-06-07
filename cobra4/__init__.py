@@ -1,6 +1,6 @@
 """cobra4 — high-level cloud-native language transpiled to Python."""
 
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 
 # Activate the .c4 import finder so user code can do
 #     use my_module          # → my_module.c4 anywhere on sys.path

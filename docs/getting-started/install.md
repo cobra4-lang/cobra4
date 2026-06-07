@@ -13,8 +13,17 @@ This installs two console scripts on your `PATH`: `c4` (short) and
 
 ```bash
 c4 --version
-# cobra4 0.6.1
+# cobra4 0.6.2
 ```
+
+Run a local health check after installation:
+
+```bash
+c4 doctor
+```
+
+Use `c4 doctor --online` when you also want to compare the installed
+version with the latest package published on PyPI.
 
 ## With pipx (isolated, recommended)
 

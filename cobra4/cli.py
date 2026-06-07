@@ -1,29 +1,20 @@
-"""cobra4 CLI — ``c4`` and ``cobra4`` commands.
-
-Sub-commands implemented in M1:
-
-- ``run FILE``   — transpile and execute a .c4 file.
-- ``build FILE`` — transpile only; write Python to ``-o OUT`` (default
-                   stdout).
-- ``fmt FILE``   — apply the canonical formatter (M1: parse → re-emit
-                   cobra4 from AST is out of scope; we only normalize
-                   trailing whitespace and run the parser to validate).
-- ``repl``       — interactive expression evaluator.
-
-Stubs (real implementation lands in later milestones):
-
-- ``serve``, ``check``, ``doc``, ``deps``, ``plugin``.
-"""
+"""cobra4 CLI — ``c4`` and ``cobra4`` commands."""
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import json
 import os
+import platform
 import runpy
+import shutil
 import sys
 import tempfile
 import textwrap
 import traceback
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -806,6 +797,177 @@ def cmd_run_watch(args: argparse.Namespace) -> int:
         return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Report local cobra4 installation and project health."""
+
+    checks: list[dict[str, str]] = []
+
+    def add(status: str, name: str, detail: str) -> None:
+        checks.append({"status": status, "name": name, "detail": detail})
+
+    py_ok = sys.version_info >= (3, 11)
+    add(
+        "ok" if py_ok else "fail",
+        "python",
+        f"{platform.python_version()} at {sys.executable}",
+    )
+    add("ok", "cobra4", f"{__version__} from {Path(__file__).resolve().parent}")
+
+    c4_path = shutil.which("c4")
+    cobra4_path = shutil.which("cobra4")
+    invoked = Path(sys.argv[0])
+    invoked_cli = invoked.name in {"c4", "cobra4", "c4.exe", "cobra4.exe"}
+    if c4_path or cobra4_path or invoked_cli:
+        entries = []
+        if invoked_cli:
+            entries.append(f"invoked={sys.argv[0]}")
+        if c4_path:
+            entries.append(f"c4={c4_path}")
+        if cobra4_path:
+            entries.append(f"cobra4={cobra4_path}")
+        found = ", ".join(entries)
+        add("ok", "cli", found)
+    else:
+        add("warn", "cli", "`c4` is not on PATH; `python -m cobra4.cli` still works")
+
+    try:
+        module = parse("x = 1\n", source_path="<doctor>")
+        rr = resolve(module)
+        if rr.ok():
+            generate(lower(module), cobra4_path="<doctor>")
+            add("ok", "compiler", "parse, resolve, lower, and codegen passed")
+        else:
+            add("fail", "compiler", "; ".join(str(d) for d in rr.errors))
+    except Exception as exc:
+        add("fail", "compiler", f"{type(exc).__name__}: {exc}")
+
+    try:
+        import cobra4.stdlib as stdlib
+
+        mods = stdlib.list_modules()
+        detail = f"{len(mods)} module(s): " + ", ".join(sorted(mods)[:8])
+        if len(mods) > 8:
+            detail += ", ..."
+        add("ok" if mods else "warn", "stdlib", detail if mods else "no modules found")
+    except Exception as exc:
+        add("fail", "stdlib", f"{type(exc).__name__}: {exc}")
+
+    project_file = _find_upward(Path.cwd(), "cobra4.toml")
+    if project_file:
+        add("ok", "project", f"found {project_file}")
+        _doctor_project_config(project_file, add)
+    else:
+        add("warn", "project", f"no cobra4.toml found from {Path.cwd()}")
+
+    _doctor_optional_extras(add)
+
+    if args.online:
+        _doctor_pypi(add)
+
+    failed = any(c["status"] == "fail" for c in checks)
+    result = {"ok": not failed, "checks": checks}
+    if args.json:
+        sys.stdout.write(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write("cobra4 doctor\n")
+        for check in checks:
+            sys.stdout.write(
+                f"[{check['status']}] {check['name']}: {check['detail']}\n"
+            )
+    return 1 if failed else 0
+
+
+def _find_upward(start: Path, filename: str) -> Path | None:
+    cur = start.resolve()
+    for candidate_dir in (cur, *cur.parents):
+        candidate = candidate_dir / filename
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _doctor_project_config(project_file: Path, add) -> None:
+    import tomllib
+
+    try:
+        with project_file.open("rb") as f:
+            cfg = tomllib.load(f)
+    except Exception as exc:
+        add("fail", "cobra4.toml", f"{type(exc).__name__}: {exc}")
+        return
+
+    deps = cfg.get("deps", {})
+    plugins = cfg.get("lang", {}).get("plugins", [])
+    add("ok", "cobra4.toml", f"{len(deps)} dep(s), {len(plugins)} plugin(s)")
+
+    missing_deps = []
+    for name in deps:
+        module_name = name.replace("-", "_")
+        if not _module_available(module_name):
+            missing_deps.append(name)
+    if missing_deps:
+        add("warn", "deps", "declared but not importable: " + ", ".join(missing_deps))
+
+    for plugin in plugins:
+        src = f"lang use {plugin}\nx = 1\n"
+        try:
+            preprocess(src)
+        except ValueError as exc:
+            add("fail", f"plugin:{plugin}", str(exc))
+        else:
+            add("ok", f"plugin:{plugin}", "available")
+
+
+def _doctor_optional_extras(add) -> None:
+    extras = {
+        "aws": ["boto3"],
+        "data": ["pandas", "pyarrow"],
+        "ssh": ["paramiko"],
+        "yaml": ["yaml"],
+        "sql": ["sqlalchemy"],
+        "graphql": ["graphql"],
+        "prom": ["prometheus_client"],
+        "redis": ["redis"],
+        "vault": ["hvac"],
+        "gcp": ["google.cloud.secretmanager"],
+        "otel": ["opentelemetry"],
+    }
+    installed = []
+    missing = []
+    for extra, modules in extras.items():
+        if all(_module_available(module) for module in modules):
+            installed.append(extra)
+        else:
+            missing.append(extra)
+    detail = "installed: " + (", ".join(installed) if installed else "none")
+    if missing:
+        detail += "; optional groups not installed: " + ", ".join(missing)
+    add("info", "optional extras", detail)
+
+
+def _doctor_pypi(add) -> None:
+    url = "https://pypi.org/pypi/cobra4/json"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        latest = str(data.get("info", {}).get("version", "unknown"))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        add("warn", "pypi", f"could not query {url}: {exc}")
+        return
+
+    if latest == __version__:
+        add("ok", "pypi", f"latest published version is {latest}")
+    else:
+        add("warn", "pypi", f"installed {__version__}; latest published is {latest}")
+
+
+def _module_available(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:
+        return False
+
+
 def cmd_doc_html(module, output_path: Path) -> None:
     """Render module → standalone HTML doc."""
     from cobra4 import ast_nodes as N
@@ -925,6 +1087,19 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p_repl = sub.add_parser("repl", help="Interactive REPL")
     p_repl.set_defaults(handler=cmd_repl)
+
+    p_doctor = sub.add_parser(
+        "doctor", help="Check the local cobra4 install and project health"
+    )
+    p_doctor.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON"
+    )
+    p_doctor.add_argument(
+        "--online",
+        action="store_true",
+        help="Also compare with the latest PyPI release",
+    )
+    p_doctor.set_defaults(handler=cmd_doctor)
 
     p_idle = sub.add_parser("idle", help="Open Cobra4 Studio (compatibility alias)")
     p_idle.add_argument("--host", default="127.0.0.1")

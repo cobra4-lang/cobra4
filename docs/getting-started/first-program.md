@@ -61,6 +61,7 @@ source line.
 c4 studio                # browser Studio: edit, run, inspect generated Python
 c4 fmt   hello.c4         # canonical re-format from AST
 c4 check hello.c4         # lint + type warnings, no execution
+c4 doctor                # local install + project health checks
 c4 repl                   # multi-line REPL with completion + history
 c4 doc   hello.c4         # extract docstrings to markdown
 c4 test                   # discover and run tests/test_*.c4

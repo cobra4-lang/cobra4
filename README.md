@@ -102,12 +102,16 @@ c4 run   examples/03_etl.c4              # transpile + execute
 c4 build examples/03_etl.c4 -o etl.py    # transpile only
 c4 fmt   examples/03_etl.c4              # canonical format
 c4 check examples/03_etl.c4              # parse + types + dispatch overlap
+c4 doctor                                # local install + project health checks
 c4 repl                                   # interactive
 c4 serve daemon.c4                        # event loop / scheduler / HTTP
 c4 test                                   # discover tests/test_*.c4
 ```
 
 Optional extras: `pip install cobra4[aws,data,ssh,yaml,otel,dev]`.
+
+For a project-level loop, see the
+[development workflow](https://cobra4-lang.github.io/cobra4/getting-started/workflow/).
 
 ## Smart dispatch — the heart
 
@@ -157,7 +161,7 @@ to localhost by default, …).
 | Stdlib written in cobra4 itself (`http`, `json`, `fs`, `data`, `time`, `strings`, `cli`, `test`) with mtime-cached import hook | ✅ |
 | LSP (`c4 lsp`): diagnostics, hover, go-to-def, references, completion, format | ✅ |
 | Cobra4 Studio (`c4 studio`): project tree, snippets, terminal, generated Python + source-map view, graph | ✅ |
-| Tooling: REPL with completion + history, formatter, `c4 doc` markdown, `c4 deps`, `c4 plugin` | ✅ |
+| Tooling: REPL with completion + history, formatter, `c4 doctor`, `c4 doc`, `c4 deps`, `c4 plugin` | ✅ |
 | VS Code extension (`editor/vscode/cobra4`) — packaged `.vsix`            | ✅ |
 | PyPI package + Open VSX extension listing                                | ✅ |
 | Official VS Code Marketplace listing                                      | 🚧 |
@@ -208,6 +212,10 @@ If you let an LLM write cobra4 code, point it at
 [`AI_HELPER.md`](AI_HELPER.md) — a structured spec of what the language
 does and does *not* support, designed to be consumed by an assistant
 without prose narrative.
+
+## Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md) for public release notes.
 
 ## License
 

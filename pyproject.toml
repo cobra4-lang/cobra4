@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cobra4"
-version = "0.6.1"
+version = "0.6.2"
 description = "A high-level, cloud-native language transpiled to Python."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,7 +39,7 @@ dependencies = [
 Homepage = "https://github.com/cobra4-lang/cobra4"
 Repository = "https://github.com/cobra4-lang/cobra4"
 Issues = "https://github.com/cobra4-lang/cobra4/issues"
-Changelog = "https://github.com/cobra4-lang/cobra4/releases"
+Changelog = "https://github.com/cobra4-lang/cobra4/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 aws = ["boto3>=1.34"]

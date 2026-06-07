@@ -1128,6 +1128,7 @@ c4 run src/main.c4                       # transpile + esegue
 c4 run src/main.c4 --watch               # re-run on file change
 c4 studio                                # IDE browser: edit/run/lint/Python generato/grafo
 c4 check src/main.c4 --strict            # tipi + linting plugin-aware
+c4 doctor                                # verifica install locale, progetto, extras, plugin
 c4 fmt src/main.c4 -w                    # format in-place, preserva plugin syntax
 c4 repl                                  # REPL multilinea con history + tab
 c4 doc src/main.c4                       # markdown da docstring

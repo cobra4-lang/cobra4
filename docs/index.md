@@ -17,6 +17,7 @@ distributed jobs to first-class language constructs. *One line of cobra4
 often replaces a small Python program.*
 
 [:material-rocket-launch: Get started](getting-started/install.md){ .md-button .md-button--primary }
+[Development workflow](getting-started/workflow.md){ .md-button }
 [Cobra4 Studio](tooling/idle.md){ .md-button }
 [:material-github: GitHub](https://github.com/cobra4-lang/cobra4){ .md-button }
 
